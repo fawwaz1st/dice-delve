@@ -198,6 +198,13 @@
     <circle class="sf" cx="14.8" cy="10.4" r="1.6"/>
     <path class="st" d="M11 14.4h2"/>
   </symbol>
+
+  <!-- Bagikan -->
+  <symbol id="i-share" viewBox="0 0 24 24">
+    <path class="st" d="M12 3.8v10.8"/>
+    <path class="st" d="m7.8 7.9 4.2-4.1 4.2 4.1"/>
+    <path class="st" d="M5.2 12.6v5.6a2 2 0 0 0 2 2h9.6a2 2 0 0 0 2-2v-5.6"/>
+  </symbol>
 </svg>`;
 
   function inject() {

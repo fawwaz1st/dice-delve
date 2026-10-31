@@ -6,7 +6,15 @@
    Token warna memakai OKLCH (Baseline, didukung semua browser modern sejak
    2023). Bayangan berlapis: satu offset keras (kesan cetak) + satu sebaran
    halus (kesan fisik).
+
+   Transisi antar halaman memakai View Transitions API (cross-document):
+   menu -> permainan -> menu berpadu halus di Chromium 126+; browser lain
+   melompat langsung seperti biasa (peningkatan progresif, tanpa JavaScript).
    ========================================================================== */
+
+@view-transition {
+  navigation: auto;
+}
 
 :root {
   /* ---- Material kayu --------------------------------------------------- */
@@ -408,12 +416,16 @@ button { font: inherit; color: inherit; }
   backdrop-filter: blur(3px) saturate(0.85);
   opacity: 0;
   visibility: hidden;
-  transition: opacity 0.2s ease, visibility 0.2s ease;
+  /* Saat menutup: opacity memudar, visibility tertunda sampai pudar selesai.
+     Saat membuka (.show): visibility langsung terlihat sehingga fokus awal
+     tidak pernah gagal di frame pertama. */
+  transition: opacity 0.2s ease, visibility 0s linear 0.2s;
 }
 
 .modal.show {
   opacity: 1;
   visibility: visible;
+  transition: opacity 0.2s ease;
 }
 
 .modal-card {
@@ -635,6 +647,14 @@ button { font: inherit; color: inherit; }
 }
 
 [hidden] { display: none !important; }
+
+/* Kanvas konfeti kemenangan: di atas segalanya, tak bisa disentuh. */
+.confetti-canvas {
+  position: fixed;
+  inset: 0;
+  z-index: 1600;
+  pointer-events: none;
+}
 
 /* Baris pemisah bergaya pita perekat. */
 .tape-rule {

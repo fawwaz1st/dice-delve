@@ -1,7 +1,8 @@
 /* ==========================================================================
    Ular Tangga Modern — core.js
    Utilitas, penyimpanan lokal (pengaturan, statistik, simpanan permainan),
-   dan toast. Wajib dimuat pertama.
+   toast, getaran (haptic), narasi pembaca layar, jebakan fokus modal, dan
+   pendaftaran service worker. Wajib dimuat pertama.
    ========================================================================== */
 
 (function () {
@@ -45,6 +46,89 @@
   /** Hormati preferensi sistem untuk gerakan minimal. */
   UT.reducedMotion = () =>
     window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  /**
+   * Getaran halus (haptic). Pola milidetik: angka tunggal atau pasangan
+   * [getar, jeda, getar, ...]. Diabaikan diam-diam bila tak didukung
+   * atau pengguna mematikan pengaturan getar.
+   */
+  UT.haptic = (pattern) => {
+    if (!navigator.vibrate) return;
+    if (!UT.getSettings().haptic) return;
+    try { navigator.vibrate(pattern); } catch (err) { /* biarkan senyap */ }
+  };
+
+  /**
+   * Narasi untuk pembaca layar: peristiwa permainan diumumkan lewat satu
+   * live region "polite" yang tidak mengganggu alur fokus.
+   */
+  let narrateEl = null;
+  UT.narrate = (message) => {
+    if (!narrateEl) {
+      narrateEl = document.createElement('div');
+      narrateEl.className = 'sr-only';
+      narrateEl.id = 'live-region';
+      narrateEl.setAttribute('role', 'status');
+      narrateEl.setAttribute('aria-live', 'polite');
+      document.body.appendChild(narrateEl);
+    }
+    // Kosongkan lalu isi ulang: pesan yang sama tetap dibacakan ulang.
+    narrateEl.textContent = '';
+    window.setTimeout(() => { narrateEl.textContent = String(message); }, 40);
+  };
+
+  /* ----------------------------------------------------------------------
+     Modal: buka/tutup dengan jebakan fokus (baseline aksesibilitas)
+     ---------------------------------------------------------------------- */
+
+  const FOCUSABLE = 'button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+  let lastTrigger = null;
+
+  function visibleFocusables(modal) {
+    // instanceof HTMLElement menyaring elemen SVG (use, path) yang tak boleh
+    // ikut siklus Tab; offsetParent menyaring yang benar-benar tersembunyi.
+    return Array.from(modal.querySelectorAll(FOCUSABLE))
+      .filter((n) => n instanceof HTMLElement && !n.disabled && n.offsetParent !== null);
+  }
+
+  /** Tab berputar di dalam modal: tidak lolos ke latar yang tertutup. */
+  function trapTab(e) {
+    if (e.key !== 'Tab') return;
+    const modal = e.currentTarget;
+    const items = visibleFocusables(modal);
+    if (!items.length) return;
+    const first = items[0];
+    const last = items[items.length - 1];
+    if (e.shiftKey && document.activeElement === first) {
+      e.preventDefault();
+      last.focus();
+    } else if (!e.shiftKey && document.activeElement === last) {
+      e.preventDefault();
+      first.focus();
+    }
+  }
+
+  UT.openModal = (modal) => {
+    if (!modal) return;
+    lastTrigger = document.activeElement;
+    modal.classList.add('show');
+    if (!modal.dataset.utTrap) {
+      modal.dataset.utTrap = '1';
+      modal.addEventListener('keydown', trapTab);
+    }
+    const items = visibleFocusables(modal);
+    if (items.length) items[0].focus();
+  };
+
+  UT.closeModal = (modal) => {
+    if (!modal) return;
+    modal.classList.remove('show');
+    if (lastTrigger && document.contains(lastTrigger)) {
+      try { lastTrigger.focus(); } catch (err) { /* elemen tak bisa difokuskan */ }
+    }
+    lastTrigger = null;
+  };
 
   /* ----------------------------------------------------------------------
      Toast: slip kertas di kanan atas
@@ -91,6 +175,7 @@
     mode: 'classic',
     sound: true,
     music: true,
+    haptic: true,
   };
 
   const STATS_DEFAULT = {
@@ -133,6 +218,7 @@
       mode: raw.mode === 'speed' ? 'speed' : 'classic',
       sound: raw.sound !== false,
       music: raw.music !== false,
+      haptic: raw.haptic !== false,
     };
   };
 
@@ -142,6 +228,7 @@
     next.mode = next.mode === 'speed' ? 'speed' : 'classic';
     next.sound = next.sound !== false;
     next.music = next.music !== false;
+    next.haptic = next.haptic !== false;
     write(KEY.settings, next);
     return next;
   };
@@ -210,4 +297,21 @@
   };
 
   UT.hasGame = () => Boolean(UT.loadGame());
+
+  /* ----------------------------------------------------------------------
+     Service worker: bisa dipasang & dimainkan offline (PWA).
+     Hanya didaftarkan di konteks aman (https / localhost).
+     ---------------------------------------------------------------------- */
+
+  if ('serviceWorker' in navigator) {
+    const secure = location.protocol === 'https:' ||
+      location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+    if (secure) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('../sw.js').catch((err) => {
+          console.warn('[UT] Service worker gagal didaftarkan:', err);
+        });
+      });
+    }
+  }
 })();

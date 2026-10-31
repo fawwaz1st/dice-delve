@@ -38,6 +38,7 @@
     turn: 0,
     phase: 'idle',   // idle | awaiting | rolling | moving | ai | over
     over: false,
+    winner: null,    // { name, isAI } untuk tombol bagikan
     mode: 'classic',
     ladders: {},
     snakes: {},
@@ -87,6 +88,38 @@
     const p = active();
     return !state.over && state.phase === 'awaiting' && p && !p.isAI;
   };
+
+  /* ----------------------------------------------------------------------
+     Layar tetap menyala (Wake Lock API). Papan ini dimainkan bersama di
+     satu layar; layar yang meredup di tengah giliran merusak suasana.
+     Tanpa UI: peningkatan progresif yang gagal secara senyap.
+     ---------------------------------------------------------------------- */
+
+  let wakeLock = null;
+  let wakeGranted = false;
+
+  async function requestWakeLock() {
+    if (!('wakeLock' in navigator)) return;
+    try {
+      wakeLock = await navigator.wakeLock.request('screen');
+      wakeGranted = true;
+      wakeLock.addEventListener('release', () => { wakeLock = null; });
+    } catch (err) {
+      /* Butuh aktivasi pengguna atau dokumen tak terlihat; biarkan senyap. */
+    }
+  }
+
+  function releaseWakeLock() {
+    try { if (wakeLock) wakeLock.release(); } catch (err) { /* senyap */ }
+    wakeLock = null;
+  }
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && wakeGranted && !state.over) {
+      requestWakeLock();
+    }
+  });
+  window.addEventListener('pagehide', releaseWakeLock);
 
   /* ----------------------------------------------------------------------
      Papan: susun ular & tangga
@@ -637,6 +670,7 @@
     renderAll();
     save();
     const p = active();
+    if (p && !state.over) UT.narrate(`Giliran ${p.name}${p.isAI ? ' (AI)' : ''}.`);
     if (p && p.isAI) runAI();
   }
 
@@ -690,6 +724,8 @@
       const top = state.ladders[p.pos];
       const dest = UT.clamp(top + bonus, 1, FINISH);
       UT.Audio.play('ladder');
+      UT.haptic([22, 40, 34]);
+      UT.narrate(`${p.name} naik tangga ke petak ${dest}.`);
       UT.toast(
         bonus > 0
           ? `${p.name} naik tangga ke ${top}, ditambah ${bonus} jadi ${dest}.`
@@ -704,11 +740,14 @@
       if (UT.Skills.takeSnakeShield(playerId)) {
         UT.Audio.play('skill');
         UT.toast(`${p.name} terlindung dari ular di petak ${p.pos}.`, 'info');
+        UT.narrate(`${p.name} terlindung dari ular di petak ${p.pos}.`);
         renderAll();
       } else {
         const dest = state.snakes[p.pos];
         UT.Audio.play('snake');
         shakeFrame();
+        UT.haptic([70, 50, 110]);
+        UT.narrate(`${p.name} kena ular, turun ke petak ${dest}.`);
         UT.toast(`${p.name} kena ular, turun ke petak ${dest}.`, 'warning');
         p.pos = dest;
         placePiece(playerId);
@@ -763,6 +802,8 @@
     const raw = UT.randInt(1, 6);
     const value = UT.Skills.modifyDice(p.id, raw);
     setFace(value);
+    UT.haptic(26);
+    UT.narrate(`${p.name} melempar dadu: ${value}.`);
 
     // Hentakan mendarat: hanya bila gerakan diizinkan.
     if (!UT.reducedMotion()) {
@@ -822,18 +863,44 @@
   function finish(winner) {
     state.over = true;
     state.phase = 'over';
+    state.winner = { name: winner.name, isAI: Boolean(winner.isAI) };
 
     UT.recordResult(winner, state.turns);
     UT.clearGame();
     UT.Audio.play('win');
+    UT.haptic([90, 60, 90, 60, 160]);
+    UT.narrate(`${winner.name} menang! Permainan selesai dalam ${state.turns} giliran.`);
+    if (window.UT.confetti) UT.confetti.burst();
 
     if (el.winTitle) el.winTitle.textContent = `${winner.name} menang!`;
     if (el.winText) {
       el.winText.textContent = `Mencapai petak ${FINISH} dalam ${state.turns} giliran.`;
     }
-    if (el.winModal) el.winModal.classList.add('show');
+    if (el.winModal) UT.openModal(el.winModal);
 
     renderAll();
+  }
+
+  /* Bagikan hasil (Web Share API) dengan fallback salin ke clipboard.
+     Wajib dipanggil dari dalam penanganan klik pengguna. */
+  function shareResult() {
+    const who = state.winner ? state.winner.name : 'Seseorang';
+    const text = `${who} juara Ular Tangga Modern dalam ${state.turns} giliran! Berani kalahkan?`;
+    const url = new URL('../', window.location.href).href;
+
+    if (navigator.canShare && navigator.canShare({ text, url })) {
+      navigator.share({ title: 'Ular Tangga Modern', text, url }).catch(() => {});
+      return;
+    }
+
+    const full = `${text} ${url}`;
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(full)
+        .then(() => UT.toast('Hasil permainan disalin. Tempel ke chat temanmu!', 'success'))
+        .catch(() => UT.toast('Gagal menyalin hasil permainan.', 'error'));
+      return;
+    }
+    UT.toast('Fitur bagikan tidak tersedia di browser ini.', 'warning');
   }
 
   /* ----------------------------------------------------------------------
@@ -866,6 +933,7 @@
     state.snakes = data.snakes || {};
     state.over = false;
     state.pending = null;
+    state.winner = null;
   }
 
   /* ----------------------------------------------------------------------
@@ -891,6 +959,7 @@
     state.turns = 0;
     state.over = false;
     state.pending = null;
+    state.winner = null;
     state.phase = 'idle';
 
     buildBoard();
@@ -935,12 +1004,8 @@
     UT.toast(UT.getSettings().music ? 'Musik dinyalakan.' : 'Musik dimatikan.', 'info', 1500);
   }
 
-  /* ----------------------------------------------------------------------
-     Modal
-     ---------------------------------------------------------------------- */
-
-  const openModal = (m) => m && m.classList.add('show');
-  const closeModal = (m) => m && m.classList.remove('show');
+  /* Modal dibuka lewat UT.openModal / UT.closeModal (core.js):
+     dilengkapi jebakan fokus agar navigasi Tab tetap di dalam dialog. */
 
   /* ----------------------------------------------------------------------
      Ikat peristiwa
@@ -968,16 +1033,22 @@
       UT.toast('Papan baru disiapkan.', 'info', 1500);
       startFresh();
     });
-    byId('btn-rules').addEventListener('click', () => openModal(el.rulesModal));
+    byId('btn-rules').addEventListener('click', () => UT.openModal(el.rulesModal));
+    byId('btn-share').addEventListener('click', shareResult);
+
+    // Wake lock juga diminta pada interaksi pertama (butuh aktivasi pengguna).
+    const firstGesture = () => { requestWakeLock(); };
+    window.addEventListener('pointerdown', firstGesture, { once: true });
+    window.addEventListener('keydown', firstGesture, { once: true });
 
     UT.$$('[data-close-modal]').forEach((b) => {
-      b.addEventListener('click', () => closeModal(byId(b.dataset.closeModal)));
+      b.addEventListener('click', () => UT.closeModal(byId(b.dataset.closeModal)));
     });
 
     // Menutup dialog lanjutkan tanpa memilih tidak boleh menyisakan layar kosong.
     const dismissResume = () => {
       if (!el.resumeModal || !el.resumeModal.classList.contains('show')) return false;
-      closeModal(el.resumeModal);
+      UT.closeModal(el.resumeModal);
       UT.clearGame();
       startFresh();
       return true;
@@ -990,12 +1061,12 @@
           dismissResume();
           return;
         }
-        closeModal(m);
+        UT.closeModal(m);
       });
     });
 
     byId('btn-again').addEventListener('click', () => {
-      closeModal(el.winModal);
+      UT.closeModal(el.winModal);
       startFresh();
     });
     byId('btn-menu').addEventListener('click', () => { window.location.href = 'menu.html'; });
@@ -1003,12 +1074,12 @@
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') {
         if (el.resumeModal && el.resumeModal.classList.contains('show')) {
-          closeModal(el.resumeModal);
+          UT.closeModal(el.resumeModal);
           UT.clearGame();
           startFresh();
           return;
         }
-        UT.$$('.modal.show').forEach(closeModal);
+        UT.$$('.modal.show').forEach(UT.closeModal);
         return;
       }
       if (e.key === ' ' || e.key === 'Enter') {
@@ -1041,6 +1112,7 @@
 
     buildDice();
     bind();
+    requestWakeLock();
 
     const saved = UT.loadGame();
 
@@ -1051,16 +1123,16 @@
       if (!UT.Skills.restoreState(saved.skills)) UT.Skills.init(state.players);
       state.phase = 'idle';
       renderAll();
-      openModal(el.resumeModal);
+      UT.openModal(el.resumeModal);
 
       document.getElementById('btn-resume').addEventListener('click', () => {
-        closeModal(el.resumeModal);
+        UT.closeModal(el.resumeModal);
         beginTurn();
         UT.toast('Melanjutkan permainan tersimpan.', 'info');
       });
 
       document.getElementById('btn-restart').addEventListener('click', () => {
-        closeModal(el.resumeModal);
+        UT.closeModal(el.resumeModal);
         UT.clearGame();
         startFresh();
       });

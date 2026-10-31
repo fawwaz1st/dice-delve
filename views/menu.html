@@ -5,9 +5,16 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <meta name="description" content="Menu Ular Tangga Modern: atur jumlah pemain, pilih mode klasik atau cepat, dan lihat statistik permainanmu.">
   <meta name="theme-color" content="#5a3b22">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Ular Tangga Modern">
+  <meta property="og:description" content="Balapan ke petak 100 di papan kayu yang diacak tiap permainan. Lawan AI, kartu skill, bisa dipasang dan dimainkan offline.">
+  <meta property="og:url" content="https://fawwaz1st.github.io/ulartangga/">
+  <meta property="og:image" content="https://fawwaz1st.github.io/ulartangga/assets/images/icon-512.png">
   <title>Ular Tangga Modern &mdash; Menu</title>
   <link rel="icon" href="../assets/images/favicon.ico" sizes="any" type="image/x-icon">
   <link rel="icon" href="../assets/images/favicon.svg" type="image/svg+xml">
+  <link rel="manifest" href="../manifest.webmanifest">
+  <link rel="apple-touch-icon" href="../assets/images/icon-192.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=Karla:wght@400;600;700&family=Space+Mono:wght@700&display=swap" rel="stylesheet">
@@ -72,6 +79,18 @@
         <div class="slip">
           <span class="slip__value" id="st-human">0</span>
           <span class="slip__name">Kemenanganmu</span>
+        </div>
+        <div class="slip">
+          <span class="slip__value" id="st-ai">0</span>
+          <span class="slip__name">Kemenangan AI</span>
+        </div>
+        <div class="slip">
+          <span class="slip__value" id="st-rate">&mdash;</span>
+          <span class="slip__name">Rasio menangmu</span>
+        </div>
+        <div class="slip">
+          <span class="slip__value" id="st-longest">&mdash;</span>
+          <span class="slip__name">Rekor giliran</span>
         </div>
       </section>
 
@@ -164,6 +183,14 @@
           <span class="setting__name">Musik latar</span>
           <button type="button" class="switch" id="sw-music" role="switch" aria-checked="true" aria-label="Musik latar"></button>
         </div>
+      </div>
+
+      <div class="setting">
+        <div class="setting__head">
+          <span class="setting__name">Getaran</span>
+          <button type="button" class="switch" id="sw-haptic" role="switch" aria-checked="true" aria-label="Getaran"></button>
+        </div>
+        <p class="setting__hint">Getaran halus di ponsel saat lempar dadu, kena ular, dan menang.</p>
       </div>
 
       <div class="modal-actions">

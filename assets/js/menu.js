@@ -19,9 +19,13 @@
     el.modeRow = document.getElementById('opt-mode');
     el.soundSwitch = document.getElementById('sw-sound');
     el.musicSwitch = document.getElementById('sw-music');
+    el.hapticSwitch = document.getElementById('sw-haptic');
     el.stGames = document.getElementById('st-games');
     el.stWinner = document.getElementById('st-winner');
     el.stHuman = document.getElementById('st-human');
+    el.stAi = document.getElementById('st-ai');
+    el.stLongest = document.getElementById('st-longest');
+    el.stRate = document.getElementById('st-rate');
     el.resumeModal = document.getElementById('resume-modal');
     el.resumeText = document.getElementById('resume-text');
   }
@@ -35,6 +39,13 @@
     el.stGames.textContent = s.totalGames.toLocaleString('id-ID');
     el.stWinner.textContent = s.lastWinner || 'Belum ada';
     el.stHuman.textContent = s.humanWins.toLocaleString('id-ID');
+    if (el.stAi) el.stAi.textContent = s.aiWins.toLocaleString('id-ID');
+    if (el.stLongest) el.stLongest.textContent = s.longestGame ? `${s.longestGame} giliran` : '—';
+    if (el.stRate) {
+      el.stRate.textContent = s.totalGames
+        ? `${Math.round((s.humanWins / s.totalGames) * 100)}%`
+        : '—';
+    }
   }
 
   /* ----------------------------------------------------------------------
@@ -55,6 +66,7 @@
 
     el.soundSwitch.setAttribute('aria-checked', String(cfg.sound));
     el.musicSwitch.setAttribute('aria-checked', String(cfg.music));
+    if (el.hapticSwitch) el.hapticSwitch.setAttribute('aria-checked', String(cfg.haptic));
   }
 
   function bindSettings() {
@@ -86,33 +98,37 @@
       renderSettings();
       UT.Audio.play('press');
     });
+
+    if (el.hapticSwitch) {
+      el.hapticSwitch.addEventListener('click', () => {
+        UT.saveSettings({ haptic: !UT.getSettings().haptic });
+        renderSettings();
+        UT.Audio.play('press');
+      });
+    }
   }
 
-  /* ----------------------------------------------------------------------
-     Modal
-     ---------------------------------------------------------------------- */
-
-  const openModal = (m) => m && m.classList.add('show');
-  const closeModal = (m) => m && m.classList.remove('show');
+  /* Modal lewat UT.openModal / UT.closeModal (core.js): jebakan fokus
+     aktif otomatis, fokus kembali ke tombol pemicu saat ditutup. */
 
   function bindModals() {
     UT.$$('[data-open-modal]').forEach((b) => {
       b.addEventListener('click', () => {
         UT.Audio.play('press');
-        openModal(document.getElementById(b.dataset.openModal));
+        UT.openModal(document.getElementById(b.dataset.openModal));
       });
     });
 
     UT.$$('[data-close-modal]').forEach((b) => {
-      b.addEventListener('click', () => closeModal(document.getElementById(b.dataset.closeModal)));
+      b.addEventListener('click', () => UT.closeModal(document.getElementById(b.dataset.closeModal)));
     });
 
     UT.$$('.modal').forEach((m) => {
-      m.addEventListener('click', (e) => { if (e.target === m) closeModal(m); });
+      m.addEventListener('click', (e) => { if (e.target === m) UT.closeModal(m); });
     });
 
     document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') UT.$$('.modal.show').forEach(closeModal);
+      if (e.key === 'Escape') UT.$$('.modal.show').forEach(UT.closeModal);
     });
   }
 
@@ -141,7 +157,7 @@
     if (el.resumeText) {
       el.resumeText.textContent = `${save.players.length} pemain, ${who}. Giliran ke-${(save.turns || 0) + 1}.`;
     }
-    openModal(el.resumeModal);
+    UT.openModal(el.resumeModal);
 
     document.getElementById('btn-resume').addEventListener('click', () => {
       goToGame();
@@ -149,7 +165,7 @@
 
     document.getElementById('btn-fresh').addEventListener('click', () => {
       UT.clearGame();
-      closeModal(el.resumeModal);
+      UT.closeModal(el.resumeModal);
       goToGame();
     });
 

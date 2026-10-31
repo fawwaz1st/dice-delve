@@ -311,16 +311,54 @@
     }
   }
 
-  /** AI memilih skill secara acak. true bila benar-benar memakai. */
+  /**
+   * AI memilih skill dengan penilaian situasi, bukan acak murni:
+   * tertinggal jauh -> efek lompat bernilai tinggi; unggul -> efek
+   * lompat justru berbahaya. Dipilih dengan roulette berbobot.
+   * @returns {boolean} true bila benar-benar memakai skill
+   */
   function aiPlay(playerId, api) {
     const ready = getSkills(playerId).filter((s) => getCooldown(playerId, s.id) === 0);
     if (ready.length === 0) return false;
-    if (Math.random() > 0.42) return false;
 
-    const choice = UT.pick(ready);
-    const res = useSkill(playerId, choice.id, api);
+    const all = api.getPlayers();
+    const self = all.find((p) => p.id === playerId);
+    if (!self) return false;
+    const leader = all.filter((p) => p.id !== playerId).sort((a, b) => b.pos - a.pos)[0];
+    const behind = leader ? leader.pos - self.pos : 0;
+
+    /* Makin tertinggal, makin sering memakai skill. */
+    const desperation = behind > 10 ? 0.7 : behind > 4 ? 0.58 : 0.46;
+    if (Math.random() > desperation) return false;
+
+    const WEIGHT = {
+      lucky_seven: 70,
+      extra_turn: 64,
+      double_roll: 55,
+      dice_boost: 50,
+      ladder_boost: 42,
+      snake_immunity: 44,
+      teleport: behind > 8 ? 88 : 30,
+      swap_positions: behind > 10 ? 92 : 18,
+      backward_move: behind > 0 ? 48 + behind * 3 : 26,
+      shield_break: 28,
+    };
+
+    const scored = ready
+      .map((s) => ({ skill: s, w: WEIGHT[s.id] || 40 }))
+      .sort((a, b) => b.w - a.w);
+    const total = scored.reduce((sum, x) => sum + x.w, 0);
+    const draw = Math.random() * total;
+    let acc = 0;
+    let choice = scored[0];
+    for (const x of scored) {
+      acc += x.w;
+      if (draw <= acc) { choice = x; break; }
+    }
+
+    const res = useSkill(playerId, choice.skill.id, api);
     if (res.ok) {
-      UT.toast(`${api.nameOf(playerId)} memakai ${choice.name}.`, 'info');
+      UT.toast(`${api.nameOf(playerId)} memakai ${choice.skill.name}.`, 'info');
       return true;
     }
     return false;

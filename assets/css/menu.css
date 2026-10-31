@@ -185,6 +185,9 @@
 .slip:nth-child(1) { transform: rotate(-1.3deg); }
 .slip:nth-child(2) { transform: rotate(0.9deg); }
 .slip:nth-child(3) { transform: rotate(-0.7deg); }
+.slip:nth-child(4) { transform: rotate(1.2deg); }
+.slip:nth-child(5) { transform: rotate(-1.1deg); }
+.slip:nth-child(6) { transform: rotate(0.7deg); }
 
 /* Selotip kecil di atas slip. */
 .slip::before {
@@ -274,8 +277,6 @@
   }
 
   .stats { grid-template-columns: 1fr 1fr; }
-
-  .slip:nth-child(1) { grid-column: 1 / -1; }
 
   .menu-actions__row { grid-template-columns: 1fr; }
 
