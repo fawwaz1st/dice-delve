@@ -18,7 +18,6 @@ const VERSION = 'ulartangga-v3';
 const CACHE_PREFIX = 'ulartangga-';
 
 const PRECACHE = [
-  './',
   'index.html',
   'views/menu.html',
   'views/game.html',
@@ -129,8 +128,10 @@ self.addEventListener('fetch', (event) => {
           if (res && res.ok) {
             const copy = res.clone();
             caches.open(VERSION).then((cache) => cache.put(event.request, copy)).catch(() => {});
+            return res;
           }
-          return res;
+          // Respons non-ok (mis. 404 sementara): coba cache lama.
+          return fromCache(event.request);
         })
         .catch(() => fromCache(event.request))
     );

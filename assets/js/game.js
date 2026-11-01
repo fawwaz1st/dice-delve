@@ -182,12 +182,14 @@
       const from = UT.randInt(24, FINISH - 2);
       const to = from - UT.randInt(7, 21);
       if (to < 2 || !free(from) || !free(to)) continue;
-      // Maksimal satu kepala ular per tercil 20 petak (80-98 zona akhir).
-      const band = Math.floor(from / 20);
-      const crowded = Object.keys(snakes).some((n) => Math.floor(Number(n) / 20) === band);
-      if (crowded) continue;
-      // Jangan letakkan ular tepat di kaki tangga.
-      if (ladderAt(from)) continue;
+      // Maksimal 2 kepala ular di zona akhir (80-98) agar tidak
+      // membentuk "gas chamber"; di bawahnya bebas (tercil 1-4).
+      if (from >= 80) {
+        const endZone = Object.keys(snakes).filter((n) => Number(n) >= 80).length;
+        if (endZone >= 2) continue;
+      }
+      // Jangan letakkan ular mendarat tepat di kaki tangga (tail = to).
+      if (ladderAt(to)) continue;
       snakes[from] = to;
       used.add(from);
       used.add(to);
@@ -629,11 +631,15 @@
 
   function openTip(anchor, skill, cd, isLive) {
     if (!el.tip) return;
-    el.tip.innerHTML = `
-      <b>${skill.name}</b>
-      ${skill.desc}
-      <span class="skill-tip__meta">${isLive ? 'AKTIF &middot; ' : ''}${cd > 0 ? `Cooldown ${cd} giliran` : 'Siap dipakai'}</span>
-    `;
+    el.tip.textContent = '';
+    const b = document.createElement('b');
+    b.textContent = skill.name;
+    el.tip.appendChild(b);
+    el.tip.appendChild(document.createTextNode(skill.desc));
+    const meta = document.createElement('span');
+    meta.className = 'skill-tip__meta';
+    meta.textContent = (isLive ? 'AKTIF · ' : '') + (cd > 0 ? `Cooldown ${cd} giliran` : 'Siap dipakai');
+    el.tip.appendChild(meta);
     el.tip.classList.add('show');
 
     const a = anchor.getBoundingClientRect();
@@ -759,7 +765,8 @@
       p.pos = UT.clamp(dest, 1, FINISH);
       placePiece(playerId);
       if (message) UT.toast(message, 'info');
-      state.pending = settle(playerId, state.gen); // cek ular/tangga di tujuan
+      // Chaining: skill berantai tidak boleh menimpa janji settle sebelumnya.
+      state.pending = (state.pending || Promise.resolve()).then(() => settle(playerId, state.gen));
     },
 
     swapWith(playerId, otherId) {
@@ -774,7 +781,7 @@
       UT.toast(`${a.name} bertukar posisi dengan ${b.name}.`, 'info');
       // Aturan harus konsisten: pemain yang berpindah ke kepala ular tetap
       // tergigit, dan yang mendarat di kaki tangga tetap naik.
-      state.pending = settle(b.id, state.gen);
+      state.pending = (state.pending || Promise.resolve()).then(() => settle(b.id, state.gen));
     },
 
     pushBack(targetId, steps) {
@@ -783,7 +790,7 @@
       t.pos = Math.max(1, t.pos - steps);
       placePiece(targetId);
       UT.toast(`${t.name} mundur ke petak ${t.pos}.`, 'warning');
-      state.pending = settle(targetId, state.gen);
+      state.pending = (state.pending || Promise.resolve()).then(() => settle(targetId, state.gen));
     },
 
     clearOpponentEffects(playerId) {
@@ -812,7 +819,7 @@
     // tegang bila ada yang di zona sprint.
     const leader = state.players.slice().sort((a, b) => b.pos - a.pos)[0];
     const human = state.players.find((p) => !p.isAI);
-    const gap = leader && human ? leader.pos - human.pos : 0;
+    const gap = leader && human ? Math.abs(leader.pos - human.pos) : 0;
     const sprint = state.players.some((p) => p.pos >= 90 && p.pos < FINISH);
     if (UT.Audio && UT.Audio.setIntensity) {
       UT.Audio.setIntensity(sprint ? 'tense' : gap > 15 ? 'calm' : 'normal');
@@ -827,16 +834,18 @@
 
     // Comeback mechanic: pemain yang tertinggal jauh mendapat satu kartu
     // bonus acak. Mencegah "formalitas menonton 15 menit" di 4 pemain.
-    const human = state.players.find((pp) => !pp.isAI);
     const leader = state.players.slice().sort((a, b) => b.pos - a.pos)[0];
-    if (human && leader && leader.id !== human.id && leader.pos - human.pos >= 20) {
-      const bonus = UT.Skills.grantBonus(human.id);
+    state.players.forEach((pp) => {
+      if (pp.id === leader.id) return;
+      if (leader.pos - pp.pos < 20) return;
+      const bonus = UT.Skills.grantBonus(pp.id);
       if (bonus) {
         UT.Audio.play('skillready');
-        UT.toast(`Kamu tertinggal jauh — dapat kartu bonus: ${bonus.name}.`, 'info', 2600);
-        UT.narrate(`Kamu mendapat kartu bonus ${bonus.name}.`);
+        const who = pp.isAI ? pp.name : 'Kamu';
+        UT.toast(`${who} tertinggal jauh — dapat kartu bonus: ${bonus.name}.`, 'info', 2600);
+        UT.narrate(`${who} mendapat kartu bonus ${bonus.name}.`);
       }
-    }
+    });
 
     state.turn = (state.turn + 1) % state.players.length;
     state.turns += 1;
@@ -881,10 +890,12 @@
     const p = playerById(playerId);
     if (!p) return false;
 
-    // Hampir menang: bunyi chime + banner.
-    if (p.pos >= 94 && p.pos < FINISH) {
+    // Hampir menang: bunyi chime hanya saat posisi meningkat (bukan saat
+    // pion mundur akibat ular di zona akhir).
+    if (p.pos >= 94 && p.pos < FINISH && p.pos > (settle.prevPos || 0)) {
       UT.Audio.play('nearwin');
     }
+    settle.prevPos = p.pos;
 
     await wait(250);
     if (stale(gen)) return false;
@@ -932,6 +943,17 @@
         renderAll();
         await wait(300);
         if (stale(gen)) return false;
+        // Cek tangga di tujuan baru (aturan konsisten).
+        if (state.ladders[p.pos]) {
+          const top = state.ladders[p.pos];
+          UT.Audio.play('ladder');
+          UT.toast(`${p.name} mendarat di tangga, naik ke petak ${top}.`, 'success');
+          p.pos = UT.clamp(top, 1, FINISH);
+          placePiece(playerId);
+          renderAll();
+          await wait(300);
+          if (stale(gen)) return false;
+        }
       } else if (UT.Skills.takeSnakeShield(playerId)) {
         UT.Audio.play('skill');
         UT.toast(`${p.name} terlindung dari ular di petak ${p.pos}.`, 'info');
@@ -1042,6 +1064,7 @@
 
     if (UT.Skills.takeExtraTurn(p.id)) {
       UT.toast(`${p.name} mendapat giliran tambahan.`, 'info');
+      UT.Skills.endTurn(p.id); // cooldown tetap berjalan saat giliran ekstra
       beginTurn();
       return;
     }
@@ -1164,6 +1187,7 @@
       turns: state.turns,
       ladders: state.ladders,
       snakes: state.snakes,
+      snakeBend: state.snakeBend,
       skills: UT.Skills.snapshot(),
       at: Date.now(),
     });
@@ -1171,13 +1195,19 @@
 
   function restore(data) {
     state.mode = data.mode === 'speed' ? 'speed' : 'classic';
-    state.players = data.players.map((p) => ({ ...p }));
+    state.players = data.players.map((p) => ({
+      ...p,
+      pos: UT.clamp(parseInt(p.pos, 10) || 1, 1, FINISH),
+    }));
+    state.turn = UT.clamp(state.turn, 0, state.players.length - 1);
     state.turn = UT.clamp(parseInt(data.turn, 10) || 0, 0, state.players.length - 1);
     state.turns = Math.max(0, parseInt(data.turns, 10) || 0);
     state.ladders = data.ladders || {};
     state.snakes = data.snakes || {};
-    state.snakeBend = {};
-    Object.keys(state.snakes).forEach((n) => { state.snakeBend[n] = Math.random() < 0.5 ? 1 : -1; });
+    state.snakeBend = (data.snakeBend && typeof data.snakeBend === 'object') ? { ...data.snakeBend } : {};
+    Object.keys(state.snakes).forEach((n) => {
+      if (typeof state.snakeBend[n] !== 'number') state.snakeBend[n] = Math.random() < 0.5 ? 1 : -1;
+    });
     state.over = false;
     state.pending = null;
     state.winner = null;
@@ -1279,13 +1309,12 @@
 
     byId('btn-back').addEventListener('click', () => { window.location.href = 'menu.html'; });
     byId('btn-reset').addEventListener('click', () => {
-      // Mengganti papan di tengah animasi membuat loop lama menulis ke
-      // permainan baru. Tunggu giliran benar-benar selesai.
       if (state.phase === 'rolling' || state.phase === 'moving' || state.phase === 'ai') {
         UT.Audio.play('reject');
         UT.toast('Tunggu giliran ini selesai dulu.', 'warning', 1600);
         return;
       }
+      if (!confirm('Papan baru? Progres saat ini hilang.')) return;
       UT.Audio.play('press');
       UT.toast('Papan baru disiapkan.', 'info', 1500);
       startFresh();
@@ -1297,6 +1326,15 @@
     const firstGesture = () => { requestWakeLock(); };
     window.addEventListener('pointerdown', firstGesture, { once: true });
     window.addEventListener('keydown', firstGesture, { once: true });
+
+    // Giliran AI yang sempat dijeda karena modal terbuka dilanjutkan saat
+    // modal ditutup (mencegah deadlock).
+    document.addEventListener('ut:modalclose', () => {
+      if (state.over) return;
+      if (state.phase !== 'awaiting') return;
+      const p = active();
+      if (p && p.isAI) runAI();
+    });
 
     UT.$$('[data-close-modal]').forEach((b) => {
       b.addEventListener('click', () => UT.closeModal(byId(b.dataset.closeModal)));
@@ -1363,6 +1401,7 @@
         return;
       }
       if (e.key === '1' || e.key === '2' || e.key === '3') {
+        if (document.querySelector('.modal.show')) return;
         if (!humanCanRoll()) return;
         const idx = parseInt(e.key, 10) - 1;
         const cards = el.hand ? Array.from(el.hand.querySelectorAll('.skill-card')) : [];

@@ -89,7 +89,7 @@
     // instanceof HTMLElement menyaring elemen SVG (use, path) yang tak boleh
     // ikut siklus Tab; offsetParent menyaring yang benar-benar tersembunyi.
     return Array.from(modal.querySelectorAll(FOCUSABLE))
-      .filter((n) => n instanceof HTMLElement && !n.disabled && n.offsetParent !== null);
+      .filter((n) => n instanceof HTMLElement && !n.disabled && n.getClientRects().length > 0);
   }
 
   /** Tab berputar di dalam modal: tidak lolos ke latar yang tertutup. */
@@ -112,6 +112,7 @@
   UT.openModal = (modal) => {
     if (!modal) return;
     lastTrigger = document.activeElement;
+    document.body.style.overflow = 'hidden';
     modal.classList.add('show');
     if (!modal.dataset.utTrap) {
       modal.dataset.utTrap = '1';
@@ -128,6 +129,10 @@
       try { lastTrigger.focus(); } catch (err) { /* elemen tak bisa difokuskan */ }
     }
     lastTrigger = null;
+    document.body.style.overflow = '';
+    // Beri tahu pemilik (mis. game.js) bahwa modal ditutup, agar giliran
+    // AI yang sempat dijeda bisa dilanjutkan.
+    try { document.dispatchEvent(new CustomEvent('ut:modalclose', { detail: { modal } })); } catch (e) { /* senyap */ }
   };
 
   /* ----------------------------------------------------------------------

@@ -342,14 +342,6 @@ button { font: inherit; color: inherit; }
   flex: 0 0 auto;
   width: 56px;
   height: 32px;
-}
-
-/* Area tekan diperluas ke >=44px tanpa mengubah visual sakelar. */
-.switch::before {
-  content: '';
-  position: absolute;
-  inset: -6px -4px;
-}
   padding: 0;
   border: none;
   border-radius: var(--r-round);
@@ -357,6 +349,13 @@ button { font: inherit; color: inherit; }
   box-shadow: var(--press);
   cursor: pointer;
   transition: background 0.18s ease;
+}
+
+/* Area tekan diperluas ke >=44px tanpa mengubah visual sakelar. */
+.switch::before {
+  content: '';
+  position: absolute;
+  inset: -6px -4px;
 }
 
 .switch::after {
