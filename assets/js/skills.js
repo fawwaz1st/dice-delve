@@ -147,16 +147,57 @@
      Kait efek (dipanggil game.js)
      ---------------------------------------------------------------------- */
 
-  /** Terapkan efek pada nilai dadu. Mengembalikan nilai akhir. */
-  function modifyDice(playerId, value) {
-    if (consume(playerId, 'lucky_seven')) return 6;
+  /**
+   * Petak pendaratan untuk sejumlah langkah, mengikuti aturan pantul di
+   * petak akhir. Dipakai untuk memastikan efek tidak pernah merugikan:
+   * di petak 96, "dadu +2" dengan lemparan 4 justru mengubah kemenangan
+   * menjadi pantul ke 98.
+   */
+  function landing(pos, steps, finish) {
+    const remaining = finish - pos;
+    return steps <= remaining ? pos + steps : finish - (steps - remaining);
+  }
+
+  /**
+   * Terapkan efek pada nilai dadu. Mengembalikan nilai akhir.
+   *
+   * Tiga efek berdeskripsi "lemparan berikutnya" (Dadu Ganda, Dorongan Dadu,
+   * Pasti Enam) dihitung dalam SATU lintasan supaya tidak ada yang bocor ke
+   * giliran berikutnya. Efek hanya dikonsumsi bila benar-benar berkontribusi,
+   * dan bila nilai berbuff mendarat lebih jauh dari finish daripada nilai asli
+   * (efek merugikan), nilai asli yang dipakai dan efeknya tetap tersimpan.
+   *
+   * @param {{pos?: number, finish?: number}} [ctx] posisi pemain saat ini
+   */
+  function modifyDice(playerId, value, ctx) {
+    const finish = ctx && ctx.finish ? ctx.finish : 100;
+    const pos = ctx && typeof ctx.pos === 'number' ? ctx.pos : 1;
+
+    const hasSeven = hasLive(playerId, 'lucky_seven');
+    const hasDouble = hasLive(playerId, 'double_roll');
+    const hasBoost = hasLive(playerId, 'dice_boost');
+    if (!hasSeven && !hasDouble && !hasBoost) return value;
 
     let out = value;
-    if (hasLive(playerId, 'double_roll')) {
-      live[playerId].delete('double_roll');
-      out = Math.max(out, UT.randInt(1, 6));
+    let usedDouble = false;
+    let usedBoost = false;
+    let usedSeven = false;
+
+    if (hasDouble) {
+      const second = UT.randInt(1, 6);
+      if (second > out) { out = second; usedDouble = true; }
     }
-    if (consume(playerId, 'dice_boost')) out = Math.min(6, out + 2);
+    if (hasBoost && out < 6) { out = Math.min(6, out + 2); usedBoost = true; }
+    if (hasSeven) { out = 6; usedSeven = true; }
+
+    // Efek tidak boleh merugikan: bandingkan pendaratan akhir.
+    if (out !== value && landing(pos, out, finish) < landing(pos, value, finish)) {
+      return value; // efek tetap aktif untuk lemparan berikutnya
+    }
+
+    if (usedSeven) consume(playerId, 'lucky_seven');
+    if (usedDouble) live[playerId].delete('double_roll');
+    if (usedBoost) consume(playerId, 'dice_boost');
     return out;
   }
 
@@ -196,15 +237,29 @@
     };
   }
 
-  /** Mengembalikan true bila cuplikan valid dan dipakai. */
+  /**
+   * Mengembalikan true bila cuplikan valid dan dipakai.
+   * Setiap pemain dinormalisasi: save lama/rusak yang kehilangan bagian
+   * `live` atau `cooldowns` tidak boleh membuat useSkill melempar TypeError.
+   */
   function restoreState(data) {
     if (!data || typeof data !== 'object' || !data.hands) return false;
-    hands = data.hands;
-    cooldowns = data.cooldowns || {};
+
+    hands = {};
+    cooldowns = {};
     live = {};
-    Object.entries(data.live || {}).forEach(([id, arr]) => {
-      live[id] = new Set(Array.isArray(arr) ? arr : []);
+
+    Object.entries(data.hands).forEach(([id, list]) => {
+      const key = String(id);
+      hands[key] = Array.isArray(list) ? list.filter((sid) => BY_ID[sid]) : [];
+
+      const cd = data.cooldowns && data.cooldowns[key];
+      cooldowns[key] = cd && typeof cd === 'object' ? { ...cd } : {};
+
+      const arr = data.live && data.live[key];
+      live[key] = new Set(Array.isArray(arr) ? arr.filter((k) => typeof k === 'string') : []);
     });
+
     return true;
   }
 
@@ -312,9 +367,12 @@
   }
 
   /**
-   * AI memilih skill dengan penilaian situasi, bukan acak murni:
-   * tertinggal jauh -> efek lompat bernilai tinggi; unggul -> efek
-   * lompat justru berbahaya. Dipilih dengan roulette berbobot.
+   * AI memilih skill dengan penilaian situasi, bukan acak murni.
+   *
+   * Sejak papan dibuka lewat api.getBoard(), AI tidak lagi buta: ia tahu
+   * tangga/ular di depannya dan menyesuaikan bobot. Ambang agresivitas kini
+   * kontinu, dan efek dadu tidak dipakai bila justru mendekatkan ke pantulan.
+   *
    * @returns {boolean} true bila benar-benar memakai skill
    */
   function aiPlay(playerId, api) {
@@ -324,29 +382,66 @@
     const all = api.getPlayers();
     const self = all.find((p) => p.id === playerId);
     if (!self) return false;
+
     const leader = all.filter((p) => p.id !== playerId).sort((a, b) => b.pos - a.pos)[0];
     const behind = leader ? leader.pos - self.pos : 0;
+    const finish = api.finishCell ? api.finishCell() : 100;
+    const board = api.getBoard ? api.getBoard() : { ladders: {}, snakes: {} };
 
-    /* Makin tertinggal, makin sering memakai skill. */
-    const desperation = behind > 10 ? 0.7 : behind > 4 ? 0.58 : 0.46;
-    if (Math.random() > desperation) return false;
+    /** Apakah sejumlah langkah dari posisi kini mendarat di kepala ular? */
+    const landsOnSnake = (steps) => Boolean(board.snakes[landing(self.pos, steps, finish)]);
+    /** Apakah mendarat di kaki tangga? */
+    const landsOnLadder = (steps) => Boolean(board.ladders[landing(self.pos, steps, finish)]);
+    /** Apakah langkah ini langsung menang? */
+    const wins = (steps) => landing(self.pos, steps, finish) >= finish;
 
-    const WEIGHT = {
-      lucky_seven: 70,
+    /* Agresivitas kontinu: makin tertinggal, makin sering memakai skill.
+       Saat unggul jauh, AI justru lebih hemat (tidak lagi 46% tetap). */
+    const aggression = UT.clamp(0.34 + behind * 0.022, 0.34, 0.78);
+    if (Math.random() > aggression) return false;
+
+    const weight = {
+      lucky_seven: 60,
       extra_turn: 64,
-      double_roll: 55,
+      double_roll: 52,
       dice_boost: 50,
       ladder_boost: 42,
-      snake_immunity: 44,
-      teleport: behind > 8 ? 88 : 30,
-      swap_positions: behind > 10 ? 92 : 18,
-      backward_move: behind > 0 ? 48 + behind * 3 : 26,
+      snake_immunity: 46,
+      teleport: behind > 8 ? 86 : 28,
+      swap_positions: behind > 10 ? 92 : 16,
+      backward_move: behind > 0 ? 46 + behind * 3 : 24,
       shield_break: 28,
     };
 
+    /* Penyesuaian sadar-papan. */
+    if (landsOnLadder(6)) weight.lucky_seven += 25;
+    if (landsOnLadder(6) || landsOnLadder(5)) weight.dice_boost += 12;
+    if (wins(6) && self.pos >= finish - 6) weight.lucky_seven += 40;
+    // Jangan bakar dadu kalau semua hasil justru menabrak ular.
+    if ([1, 2, 3, 4, 5, 6].every(landsOnSnake)) {
+      weight.lucky_seven -= 30;
+      weight.dice_boost -= 20;
+      weight.double_roll -= 20;
+    }
+    // Perisai ular bernilai bila ular ada tak jauh di depan.
+    if (Object.keys(board.snakes).some((n) => Number(n) > self.pos && Number(n) <= self.pos + 12)) {
+      weight.snake_immunity += 26;
+    }
+    // Pacu tangga hanya berguna bila masih ada tangga di depan.
+    const ladderAhead = Object.keys(board.ladders).some((n) => Number(n) > self.pos);
+    if (!ladderAhead) weight.ladder_boost = 0;
+    // Efek dadu beracun bila di zona pantul dan buff malah merugikan.
+    if (self.pos > finish - 6) {
+      weight.dice_boost -= 25;
+      weight.double_roll -= 15;
+    }
+
     const scored = ready
-      .map((s) => ({ skill: s, w: WEIGHT[s.id] || 40 }))
+      .map((s) => ({ skill: s, w: Math.max(0, weight[s.id] || 40) }))
+      .filter((x) => x.w > 0)
       .sort((a, b) => b.w - a.w);
+    if (scored.length === 0) return false;
+
     const total = scored.reduce((sum, x) => sum + x.w, 0);
     const draw = Math.random() * total;
     let acc = 0;

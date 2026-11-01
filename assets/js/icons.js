@@ -192,6 +192,15 @@
     <path class="st" d="M7.5 9h9M7 13h10M6.5 17h11"/>
   </symbol>
 
+  <!-- Bentuk abstrak untuk pion (double-coding: warna + bentuk) -->
+  <symbol id="i-token-triangle" viewBox="0 0 24 24">
+    <path class="sf" d="M12 4.6 20.2 19.4H3.8Z"/>
+  </symbol>
+
+  <symbol id="i-token-square" viewBox="0 0 24 24">
+    <rect class="sf" x="5.2" y="5.2" width="13.6" height="13.6" rx="2.4"/>
+  </symbol>
+
   <symbol id="i-skull" viewBox="0 0 24 24">
     <path class="st" d="M12 3.6c4.2 0 7 2.9 7 6.8 0 2.3-1 3.6-1.6 4.4-.4.5-.6.9-.6 1.6v1.2a1.6 1.6 0 0 1-1.6 1.6H8.8A1.6 1.6 0 0 1 7.2 17.6v-1.2c0-.7-.2-1.1-.6-1.6-.6-.8-1.6-2.1-1.6-4.4 0-3.9 2.8-6.8 7-6.8Z"/>
     <circle class="sf" cx="9.2" cy="10.4" r="1.6"/>

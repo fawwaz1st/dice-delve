@@ -15,6 +15,9 @@
   display: grid;
   place-items: center;
   padding: var(--s4);
+  padding-left: max(var(--s4), env(safe-area-inset-left));
+  padding-right: max(var(--s4), env(safe-area-inset-right));
+  padding-bottom: max(var(--s4), env(safe-area-inset-bottom));
 }
 
 /* ==========================================================================
@@ -220,7 +223,7 @@
   display: block;
   margin-top: 2px;
   font-family: var(--font-mono);
-  font-size: 0.6rem;
+  font-size: 0.72rem;
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--ink-soft);

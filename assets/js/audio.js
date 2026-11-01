@@ -162,6 +162,14 @@
         blip(f, 0.34, { wave: 'triangle', vol: 0.38, at: i * 0.15 });
       });
     },
+
+    /* Kalah: nada menurun, lembut — bukan kegagalan, hanya "coba lagi". */
+    lose() {
+      [659, 523, 392].forEach((f, i) => {
+        blip(f, 0.26, { wave: 'triangle', vol: 0.22, at: i * 0.18 });
+      });
+      knock(0.2, 0.62, 800);
+    },
   };
 
   /* ----------------------------------------------------------------------

@@ -139,7 +139,9 @@
     if (!el) {
       el = document.createElement('div');
       el.id = 'toast-stack';
-      el.setAttribute('aria-live', 'polite');
+      // Toast adalah umpan balik visual. Pengumuman aksesibilitas
+      // dikirim lewat satu live region (UT.narrate) agar tidak ganda.
+      el.setAttribute('aria-hidden', 'true');
       document.body.appendChild(el);
     }
     return el;
@@ -211,15 +213,21 @@
 
   /* ---- Pengaturan ------------------------------------------------------ */
 
+  // Cache di memori: getSettings() dipanggil di setiap efek suara/getaran.
+  // Tanpa cache, tiap giliran melakukan belasan baca localStorage sinkron.
+  let settingsCache = null;
+
   UT.getSettings = () => {
+    if (settingsCache) return settingsCache;
     const raw = read(KEY.settings, SETTINGS_DEFAULT);
-    return {
+    settingsCache = {
       players: UT.clamp(parseInt(raw.players, 10) || 2, 2, 4),
       mode: raw.mode === 'speed' ? 'speed' : 'classic',
       sound: raw.sound !== false,
       music: raw.music !== false,
       haptic: raw.haptic !== false,
     };
+    return settingsCache;
   };
 
   UT.saveSettings = (patch) => {
@@ -230,6 +238,7 @@
     next.music = next.music !== false;
     next.haptic = next.haptic !== false;
     write(KEY.settings, next);
+    settingsCache = next;
     return next;
   };
 
@@ -262,11 +271,6 @@
     return s;
   };
 
-  UT.resetStats = () => {
-    write(KEY.stats, { ...STATS_DEFAULT });
-    return UT.getStats();
-  };
-
   /* ---- Simpanan permainan (lanjut setelah refresh) --------------------- */
 
   /**
@@ -295,8 +299,6 @@
       console.warn('[UT] Gagal menghapus simpanan:', err);
     }
   };
-
-  UT.hasGame = () => Boolean(UT.loadGame());
 
   /* ----------------------------------------------------------------------
      Service worker: bisa dipasang & dimainkan offline (PWA).

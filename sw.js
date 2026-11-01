@@ -1,11 +1,21 @@
 /* ==========================================================================
    Ular Tangga Modern — sw.js (service worker)
-   Precache seluruh aset lokal saat install, cache-first dengan pembaruan
-   di latar untuk permintaan same-origin, dan stale-while-revalidate untuk
-   Google Fonts. Naikkan VERSION untuk memaksa cache lama dibuang.
+
+   Strategi:
+   - Navigasi + berkas kode (HTML/CSS/JS): NETWORK-FIRST. Versi baru langsung
+     terpakai saat online, cache hanya jaring saat offline. Ini mencegah
+     dokumen baru dipasangkan dengan skrip lama (version skew).
+   - Gambar: cache-first dengan penyegaran di latar (jarang berubah).
+   - Google Fonts: stale-while-revalidate.
+   - Selalu ada Response cadangan: respondWith() tidak boleh menerima undefined.
+
+   Catatan penting: caches.keys() berlingkup ORIGIN, bukan scope. Di GitHub
+   Pages semua project page berbagi satu origin, jadi pembersihan cache WAJIB
+   dibatasi ke prefiks milik aplikasi ini saja.
    ========================================================================== */
 
-const VERSION = 'ulartangga-v2';
+const VERSION = 'ulartangga-v3';
+const CACHE_PREFIX = 'ulartangga-';
 
 const PRECACHE = [
   './',
@@ -30,6 +40,37 @@ const PRECACHE = [
   'assets/images/icon-maskable-512.png',
 ];
 
+/* Berkas kode: tidak boleh disajikan basi, karena HTML dan JS harus sejalan. */
+const CODE = /\.(?:html|css|js|webmanifest)$/i;
+
+/** Response cadangan supaya offline tidak pernah gagal keras. */
+function offlineResponse(kind) {
+  if (kind === 'document') {
+    return new Response(
+      '<!DOCTYPE html><html lang="id"><meta charset="utf-8">' +
+      '<meta name="viewport" content="width=device-width,initial-scale=1">' +
+      '<title>Ular Tangga Modern — offline</title>' +
+      '<body style="margin:0;min-height:100vh;display:grid;place-items:center;' +
+      'background:#4a2f1b;color:#f3e0bd;font:16px/1.5 system-ui,sans-serif;text-align:center">' +
+      '<div><h1 style="font-size:1.4rem">Belum pernah dibuka online</h1>' +
+      '<p>Halaman ini belum tersimpan di cache. Sambungkan internet sekali, lalu buka lagi.</p>' +
+      '</div></body></html>',
+      { status: 200, headers: { 'Content-Type': 'text/html; charset=utf-8' } }
+    );
+  }
+  return new Response('', { status: 504, statusText: 'Offline' });
+}
+
+/** Ambil dari cache sebagai cadangan terakhir. */
+function fromCache(request) {
+  return caches.match(request).then((hit) => {
+    if (hit) return hit;
+    return caches.match('views/game.html').then((fallback) => fallback || offlineResponse(
+      request.mode === 'navigate' ? 'document' : 'asset'
+    ));
+  });
+}
+
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(VERSION)
@@ -41,60 +82,76 @@ self.addEventListener('install', (event) => {
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys()
-      .then((keys) => Promise.all(keys.filter((k) => k !== VERSION).map((k) => caches.delete(k))))
+      // HANYA cache milik aplikasi ini; cache PWA lain di origin yang sama
+      // (GitHub Pages berbagi origin antar project page) tidak boleh disentuh.
+      .then((keys) => Promise.all(
+        keys
+          .filter((k) => k.startsWith(CACHE_PREFIX) && k !== VERSION)
+          .map((k) => caches.delete(k))
+      ))
       .then(() => self.clients.claim())
   );
 });
 
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
+
   const url = new URL(event.request.url);
 
-  if (url.origin === self.location.origin) {
-    // Navigasi (dokumen HTML): network-first. Versi terbaru langsung terlihat
-    // saat online, dan cache hanya dipakai sebagai jaring saat offline.
-    if (event.request.mode === 'navigate') {
-      event.respondWith(
-        fetch(event.request)
-          .then((res) => {
-            const copy = res.clone();
-            caches.open(VERSION).then((cache) => cache.put(event.request, copy)).catch(() => {});
-            return res;
-          })
-          .catch(() => caches.match(event.request).then((hit) => hit || caches.match('views/game.html')))
-      );
-      return;
-    }
-
-    // Aset statis (CSS/JS/ikon): cache-first, segarkan cache di latar.
+  /* ---- Google Fonts: stale-while-revalidate ---------------------------- */
+  if (/(^|\.)fonts\.(googleapis|gstatic)\.com$/.test(url.hostname)) {
     event.respondWith(
       caches.match(event.request).then((hit) => {
         const refresh = fetch(event.request)
           .then((res) => {
-            const copy = res.clone();
-            caches.open(VERSION).then((cache) => cache.put(event.request, copy)).catch(() => {});
+            if (res && res.ok) {
+              const copy = res.clone();
+              caches.open(VERSION).then((cache) => cache.put(event.request, copy)).catch(() => {});
+            }
             return res;
           })
-          .catch(() => hit);
-        return hit || refresh;
+          .catch(() => null);
+        // Font boleh tampil dari cache lebih dulu; kalau tidak ada sama sekali,
+        // kembalikan Response kosong alih-alih undefined.
+        return hit || refresh.then((res) => res || new Response('', { status: 504 }));
       })
     );
     return;
   }
 
-  if (/(^|\.)fonts\.(googleapis|gstatic)\.com$/.test(url.hostname)) {
-    // Stale-while-revalidate: font tampil instan, diperbarui di belakang.
+  if (url.origin !== self.location.origin) return;
+
+  /* ---- Navigasi & berkas kode: network-first --------------------------- */
+  if (event.request.mode === 'navigate' || CODE.test(url.pathname)) {
     event.respondWith(
-      caches.match(event.request).then((hit) => {
-        const refresh = fetch(event.request)
-          .then((res) => {
+      fetch(event.request)
+        .then((res) => {
+          if (res && res.ok) {
             const copy = res.clone();
             caches.open(VERSION).then((cache) => cache.put(event.request, copy)).catch(() => {});
-            return res;
-          })
-          .catch(() => hit);
-        return hit || refresh;
-      })
+          }
+          return res;
+        })
+        .catch(() => fromCache(event.request))
     );
+    return;
   }
+
+  /* ---- Gambar & aset lain: cache-first, segarkan di latar -------------- */
+  event.respondWith(
+    caches.match(event.request).then((hit) => {
+      const refresh = fetch(event.request)
+        .then((res) => {
+          if (res && res.ok) {
+            const copy = res.clone();
+            caches.open(VERSION).then((cache) => cache.put(event.request, copy)).catch(() => {});
+          }
+          return res;
+        })
+        .catch(() => null);
+
+      // Selalu kembalikan sesuatu yang berupa Response.
+      return hit || refresh.then((res) => res || offlineResponse('asset'));
+    })
+  );
 });

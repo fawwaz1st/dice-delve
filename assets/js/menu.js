@@ -136,15 +136,18 @@
      Navigasi
      ---------------------------------------------------------------------- */
 
-  function goToGame() {
+  function goToGame(resume) {
     UT.Audio.play('press');
     if (el.loading) el.loading.classList.add('show');
-    setTimeout(() => { window.location.href = 'game.html'; }, 600);
+    const target = resume ? 'game.html?resume=1' : 'game.html';
+    setTimeout(() => { window.location.href = target; }, 600);
   }
 
   /* ----------------------------------------------------------------------
      Simpanan permainan
      ---------------------------------------------------------------------- */
+
+  let resumeBound = false;
 
   function offerResume() {
     const save = UT.loadGame();
@@ -159,15 +162,18 @@
     }
     UT.openModal(el.resumeModal);
 
-    document.getElementById('btn-resume').addEventListener('click', () => {
-      goToGame();
-    });
+    if (!resumeBound) {
+      resumeBound = true;
+      document.getElementById('btn-resume').addEventListener('click', () => {
+        goToGame(true);
+      });
 
-    document.getElementById('btn-fresh').addEventListener('click', () => {
-      UT.clearGame();
-      UT.closeModal(el.resumeModal);
-      goToGame();
-    });
+      document.getElementById('btn-fresh').addEventListener('click', () => {
+        UT.clearGame();
+        UT.closeModal(el.resumeModal);
+        goToGame(false);
+      });
+    }
 
     return true;
   }
@@ -184,7 +190,7 @@
     bindModals();
 
     document.getElementById('btn-start').addEventListener('click', () => {
-      if (!offerResume()) goToGame();
+      if (!offerResume()) goToGame(false);
     });
 
     // Segarkan statistik saat kembali lewat cache riwayat.

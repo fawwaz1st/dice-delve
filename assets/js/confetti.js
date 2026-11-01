@@ -57,7 +57,8 @@
   }
 
   function tick() {
-    if (!ctx) return;
+    if (!ctx || !canvas) return;
+    fitCanvas();
     const W = window.innerWidth;
     const H = window.innerHeight;
     ctx.clearRect(0, 0, W, H);
@@ -95,10 +96,17 @@
       running = false;
       cancelAnimationFrame(raf);
       ctx.clearRect(0, 0, W, H);
+      // Canvas dibuang agar DOM tidak menumpuk setelah perayaan selesai.
+      if (canvas && canvas.parentNode) canvas.parentNode.removeChild(canvas);
+      canvas = null;
+      ctx = null;
+      if (resizeHandler) { window.removeEventListener('resize', resizeHandler); resizeHandler = null; }
     }
   }
 
   /** Ledakan keping dari dua sisi layar. count = jumlah keping. */
+  let resizeHandler = null;
+
   function burst(count = 150) {
     if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
     if (!ensureCanvas()) return;
@@ -106,6 +114,8 @@
     makeParts(count);
     if (!running) {
       running = true;
+      resizeHandler = () => { if (canvas) fitCanvas(); };
+      window.addEventListener('resize', resizeHandler);
       raf = requestAnimationFrame(tick);
     }
   }

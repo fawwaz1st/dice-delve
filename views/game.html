@@ -66,6 +66,7 @@
     </header>
 
     <main class="table">
+      <h1 class="sr-only">Ular Tangga — Permainan</h1>
       <!-- Zona giliran & dadu -->
       <section class="zone-turn plank" aria-label="Giliran dan dadu">
         <div class="turn">
@@ -82,6 +83,24 @@
             <span class="dice-btn__label">Lempar Dadu</span>
           </button>
           <p class="dice-log" id="dice-log">Lempar dadu untuk mulai.</p>
+          <span class="dice-result" id="dice-result" aria-hidden="true"></span>
+          <p class="almost-banner" id="almost-banner" hidden></p>
+        </div>
+
+        <!-- Panel hasil: muncul saat permainan selesai, agar menutup modal
+             kemenangan tidak jadi jalan buntu. -->
+        <div class="result-panel" id="result-panel" hidden>
+          <p class="result-panel__text" id="result-text"></p>
+          <div class="result-panel__actions">
+            <button type="button" class="btn btn-paint" id="btn-result-again">
+              <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24"><use href="#i-reset"></use></svg>
+              <span>Main Lagi</span>
+            </button>
+            <button type="button" class="btn btn-wood" id="btn-result-menu">
+              <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24"><use href="#i-home"></use></svg>
+              <span>Menu Utama</span>
+            </button>
+          </div>
         </div>
       </section>
 
@@ -89,7 +108,7 @@
       <section class="zone-board board-zone" aria-label="Papan permainan">
         <div class="board-frame" id="board-frame">
           <div class="board-paper" id="board-paper">
-            <div class="board-grid" id="board-grid" role="grid" aria-label="Papan ular tangga 10 kali 10"></div>
+            <div class="board-grid" id="board-grid" role="img" aria-label="Papan ular tangga 10 kali 10. Posisi diumumkan lewat live region."></div>
             <svg class="board-lines" id="board-lines" aria-hidden="true"></svg>
             <div class="board-pieces" id="board-pieces" aria-hidden="true"></div>
           </div>
