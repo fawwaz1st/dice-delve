@@ -21,6 +21,10 @@
      Double-coding (warna + bentuk) sesuai praktik aksesibilitas 2026. */
   const PIECE_GLYPH = ['person', 'robot', 'token-triangle', 'token-square'];
 
+  /* kepribadian AI: mempengaruhi agresivitas dan gaya bermain. */
+  const PERSONALITIES = ['agresif', 'hati-hati', 'seimbang'];
+  const PERSONALITY_LABEL = { agresif: 'Agresif', 'hati-hati': 'Hati-hati', seimbang: 'Seimbang' };
+
   /* Pola pip dadu: indeks 0-8 pada grid 3x3. */
   const PIPS = {
     1: [4],
@@ -668,6 +672,12 @@
       tag.className = 'tag';
       tag.textContent = p.isAI ? 'AI' : 'Kamu';
       who.appendChild(tag);
+      if (p.isAI && p.personality) {
+        const pers = document.createElement('span');
+        pers.className = 'tag tag--pers';
+        pers.textContent = PERSONALITY_LABEL[p.personality];
+        who.appendChild(pers);
+      }
 
       const track = document.createElement('span');
       track.className = 'score-item__track';
@@ -797,12 +807,37 @@
     save();
     const p = active();
     if (p && !state.over) UT.narrate(`Giliran ${p.name}${p.isAI ? ' (AI)' : ''}.`);
+
+    // Intensitas musik mengikuti keadaan: tenang bila pemimpin jauh di depan,
+    // tegang bila ada yang di zona sprint.
+    const leader = state.players.slice().sort((a, b) => b.pos - a.pos)[0];
+    const human = state.players.find((p) => !p.isAI);
+    const gap = leader && human ? leader.pos - human.pos : 0;
+    const sprint = state.players.some((p) => p.pos >= 90 && p.pos < FINISH);
+    if (UT.Audio && UT.Audio.setIntensity) {
+      UT.Audio.setIntensity(sprint ? 'tense' : gap > 15 ? 'calm' : 'normal');
+    }
+
     if (p && p.isAI) runAI();
   }
 
   function passTurn() {
     const p = active();
     if (p) UT.Skills.endTurn(p.id);
+
+    // Comeback mechanic: pemain yang tertinggal jauh mendapat satu kartu
+    // bonus acak. Mencegah "formalitas menonton 15 menit" di 4 pemain.
+    const human = state.players.find((pp) => !pp.isAI);
+    const leader = state.players.slice().sort((a, b) => b.pos - a.pos)[0];
+    if (human && leader && leader.id !== human.id && leader.pos - human.pos >= 20) {
+      const bonus = UT.Skills.grantBonus(human.id);
+      if (bonus) {
+        UT.Audio.play('skillready');
+        UT.toast(`Kamu tertinggal jauh — dapat kartu bonus: ${bonus.name}.`, 'info', 2600);
+        UT.narrate(`Kamu mendapat kartu bonus ${bonus.name}.`);
+      }
+    }
+
     state.turn = (state.turn + 1) % state.players.length;
     state.turns += 1;
     UT.Audio.play('turn');
@@ -846,6 +881,11 @@
     const p = playerById(playerId);
     if (!p) return false;
 
+    // Hampir menang: bunyi chime + banner.
+    if (p.pos >= 94 && p.pos < FINISH) {
+      UT.Audio.play('nearwin');
+    }
+
     await wait(250);
     if (stale(gen)) return false;
 
@@ -856,12 +896,10 @@
       UT.Audio.play('ladder');
       UT.haptic([22, 40, 34]);
       UT.narrate(`${p.name} naik tangga ke petak ${dest}.`);
-      UT.toast(
-        bonus > 0
-          ? `${p.name} naik tangga ke ${top}, ditambah ${bonus} jadi ${dest}.`
-          : `${p.name} naik tangga ke petak ${dest}.`,
-        'success'
-      );
+      const ladderTexts = bonus > 0
+        ? [`${p.name} naik tangga ke ${top}, ditambah ${bonus} jadi ${dest}.`]
+        : [`${p.name} naik tangga ke petak ${dest}.`, `Tangga ${p.pos} seperti ditunggu-tunggu — ${p.name} ke ${dest}.`];
+      UT.toast(ladderTexts[UT.randInt(0, ladderTexts.length - 1)], 'success');
       p.pos = dest;
       placePiece(playerId);
       renderAll();
@@ -904,8 +942,15 @@
         UT.Audio.play('snake');
         shakeFrame();
         UT.haptic([70, 50, 110]);
-        UT.narrate(`${p.name} kena ular, turun ke petak ${dest}.`);
-        UT.toast(`${p.name} kena ular, turun ke petak ${dest}.`, 'warning');
+        // Hit-stop: jeda singkat agar gigitan terasa berat.
+        if (!UT.reducedMotion()) await wait(80);
+        const snakeTexts = [
+          `${p.name} kena ular, turun ke petak ${dest}.`,
+          `Ular di petak ${p.pos} rupanya lapar — ${p.name} turun ke ${dest}.`,
+          `${p.name} digigit ular, meluncur ke petak ${dest}.`,
+        ];
+        UT.narrate(snakeTexts[0]);
+        UT.toast(snakeTexts[UT.randInt(0, snakeTexts.length - 1)], 'warning');
         p.pos = dest;
         placePiece(playerId);
         renderAll();
@@ -1149,6 +1194,7 @@
       name: i === 0 ? 'Pemain 1' : `AI ${i}`,
       isAI: i > 0,
       color: COLORS[i % COLORS.length],
+      personality: i === 0 ? null : PERSONALITIES[(i - 1) % PERSONALITIES.length],
       pos: 1,
     }));
   }
@@ -1302,6 +1348,25 @@
           return;
         }
         UT.$$('.modal.show').forEach(UT.closeModal);
+        return;
+      }
+      if (e.key === 'm' || e.key === 'M') {
+        toggleMusic();
+        return;
+      }
+      if (e.key === 'r' || e.key === 'R') {
+        if (state.phase === 'rolling' || state.phase === 'moving' || state.phase === 'ai') return;
+        if (confirm('Papan baru? Progres saat ini hilang.')) {
+          UT.Audio.play('press');
+          startFresh();
+        }
+        return;
+      }
+      if (e.key === '1' || e.key === '2' || e.key === '3') {
+        if (!humanCanRoll()) return;
+        const idx = parseInt(e.key, 10) - 1;
+        const cards = el.hand ? Array.from(el.hand.querySelectorAll('.skill-card')) : [];
+        if (cards[idx] && cards[idx].getAttribute('aria-disabled') !== 'true') cards[idx].click();
         return;
       }
       if (e.key === ' ' || e.key === 'Enter') {

@@ -21,6 +21,10 @@
   let musicTimer = null;
   let musicStep = 0;
   let musicTrack = null;
+  // Intensitas musik: calm (tenang) | normal | tense (tegang). Berubah
+  // sesuai keadaan permainan (selisih posisi, zona sprint).
+  let musicIntensity = 'normal';
+  let beatMultiplier = 1;
 
   const MUSIC_LEVEL = 0.14;
   const SFX_LEVEL = 0.42;
@@ -170,6 +174,28 @@
       });
       knock(0.2, 0.62, 800);
     },
+
+    /* Hampir menang: chime singkat. */
+    nearwin() {
+      [784, 988, 1319].forEach((f, i) => {
+        blip(f, 0.16, { wave: 'sine', vol: 0.26, at: i * 0.08 });
+      });
+    },
+
+    /* Skill siap lagi: ping kecil. */
+    skillready() {
+      blip(880, 0.12, { wave: 'sine', vol: 0.2 });
+      blip(1320, 0.08, { wave: 'sine', vol: 0.14, at: 0.09 });
+    },
+
+    /* Langkah pion AI: lebih pelan agar tidak berisik. */
+    step: () => knock(0.2, 0, 1500),
+
+    /* Combo: dua nada menanjak. */
+    combo() {
+      blip(523, 0.12, { wave: 'triangle', vol: 0.24 });
+      blip(784, 0.14, { wave: 'triangle', vol: 0.28, at: 0.1 });
+    },
   };
 
   /* ----------------------------------------------------------------------
@@ -210,7 +236,7 @@
       b.stop(t0 + 1.4);
     }
 
-    musicTimer = setTimeout(musicStepPlay, track.beat);
+    musicTimer = setTimeout(musicStepPlay, Math.round(track.beat * beatMultiplier));
   }
 
   function startMusic() {
@@ -239,6 +265,20 @@
      API
      ---------------------------------------------------------------------- */
 
+  /** Ubah intensitas musik. Dipanggil dari game.js sesuai keadaan. */
+  function setIntensity(level) {
+    if (!ctx) return;
+    if (level === musicIntensity) return;
+    musicIntensity = level;
+    if (level === 'calm') beatMultiplier = 1.25;
+    else if (level === 'tense') beatMultiplier = 0.72;
+    else beatMultiplier = 1;
+    // Pilih trek yang cocok dengan intensitas.
+    if (musicOn) {
+      musicTrack = UT.pick(level === 'tense' ? [TRACKS[2]] : level === 'calm' ? [TRACKS[1]] : TRACKS);
+    }
+  }
+
   UT.Audio = {
     play(name) {
       if (!settings().sound) return;
@@ -250,6 +290,7 @@
 
     startMusic,
     stopMusic,
+    setIntensity,
 
     /** Terapkan preferensi musik terkini setelah pengaturan berubah. */
     syncMusic() {

@@ -210,6 +210,24 @@
   /** true bila pemain mendapat giliran ekstra. */
   const takeExtraTurn = (id) => consume(id, 'extra_turn');
 
+  /**
+   * Beri satu kartu bonus acak kepada pemain yang tertinggal jauh.
+   * Hanya bila tangan belum penuh (maks 4) dan kartu belum dimiliki.
+   * @returns {object|null} skill yang diberikan, atau null
+   */
+  function grantBonus(playerId) {
+    if (!hands[playerId]) return null;
+    if (hands[playerId].length >= 4) return null;
+    const owned = new Set(hands[playerId]);
+    const pool = CATALOG.filter((s) => !owned.has(s.id));
+    if (pool.length === 0) return null;
+    const pick = UT.pick(pool);
+    hands[playerId].push(pick.id);
+    if (!cooldowns[playerId]) cooldowns[playerId] = {};
+    cooldowns[playerId][pick.id] = 0;
+    return pick;
+  }
+
   /** Akhir giliran: turunkan semua cooldown pemain ini. */
   function endTurn(playerId) {
     const cd = cooldowns[playerId];
@@ -396,8 +414,10 @@
     const wins = (steps) => landing(self.pos, steps, finish) >= finish;
 
     /* Agresivitas kontinu: makin tertinggal, makin sering memakai skill.
-       Saat unggul jauh, AI justru lebih hemat (tidak lagi 46% tetap). */
-    const aggression = UT.clamp(0.34 + behind * 0.022, 0.34, 0.78);
+       Kepribadian menggeser baseline: agresif +0.12, hati-hati -0.12. */
+    const pers = self.personality || 'seimbang';
+    const baseAggr = pers === 'agresif' ? 0.46 : pers === 'hati-hati' ? 0.22 : 0.34;
+    const aggression = UT.clamp(baseAggr + behind * 0.022, 0.18, 0.82);
     if (Math.random() > aggression) return false;
 
     const weight = {
@@ -412,6 +432,15 @@
       backward_move: behind > 0 ? 46 + behind * 3 : 24,
       shield_break: 28,
     };
+
+    /* Kepribadian mempengaruhi preferensi kartu. */
+    if (pers === 'agresif') {
+      weight.teleport += 12; weight.backward_move += 10; weight.dice_boost += 6;
+      weight.snake_immunity -= 8;
+    } else if (pers === 'hati-hati') {
+      weight.snake_immunity += 14; weight.extra_turn += 10; weight.ladder_boost += 8;
+      weight.teleport -= 10; weight.backward_move -= 6;
+    }
 
     /* Penyesuaian sadar-papan. */
     if (landsOnLadder(6)) weight.lucky_seven += 25;
@@ -472,6 +501,7 @@
     takeLadderBonus,
     takeSnakeShield,
     takeExtraTurn,
+    grantBonus,
     endTurn,
     useSkill,
     aiPlay,
