@@ -2,80 +2,31 @@
 <html lang="id">
 <head>
   <meta charset="UTF-8">
-  <script>window.location.replace('views/menu.html');</script>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description" content="Ular Tangga Modern: papan 10 kali 10 yang diacak tiap permainan, lawan AI, dan skill. Berjalan di browser tanpa instalasi.">
-  <meta name="theme-color" content="#5a3b22">
-  <title>Ular Tangga Modern</title>
-  <link rel="icon" href="assets/images/favicon.ico" sizes="any" type="image/x-icon">
-  <link rel="icon" href="assets/images/favicon.svg" type="image/svg+xml">
-  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#12100e">
+  <meta name="description" content="Dice Delve — board-roguelike 3D stylized: lempar dadu, jelajahi papan prosedural, kumpulkan kartu, lawan boss.">
+  <title>Dice Delve</title>
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=Karla:wght@400;600;700&family=Space+Mono:wght@700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="assets/css/base.css">
-  <style>
-    /* Halaman perantara: kartu kecil di tengah meja sambil mengalihkan. */
-    .gate {
-      min-height: 100vh;
-      min-height: 100dvh;
-      display: grid;
-      place-content: center;
-      justify-items: center;
-      gap: 14px;
-      padding: var(--s4);
-      text-align: center;
-    }
-
-    .gate__card {
-      display: grid;
-      justify-items: center;
-      gap: 10px;
-      padding: var(--s5) var(--s5) var(--s4);
-      max-width: 380px;
-      transform: rotate(-1.2deg);
-    }
-
-    .gate__die {
-      width: 60px;
-      height: 60px;
-      color: var(--ink);
-      animation: gate-tumble 2.2s ease-in-out infinite;
-    }
-
-    @keyframes gate-tumble {
-      0%, 100% { transform: rotate(0deg); }
-      35% { transform: rotate(-16deg); }
-      70% { transform: rotate(12deg); }
-    }
-
-    .gate__title {
-      font-size: clamp(1.4rem, 6vw, 1.9rem);
-      color: oklch(0.34 0.09 55);
-    }
-
-    .gate__text {
-      font-size: 0.92rem;
-      color: var(--ink-soft);
-    }
-  </style>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,800&family=Karla:wght@400;600;700&family=Space+Mono:wght@700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/src/ui/styles.css">
 </head>
 <body>
-  <main class="gate">
-    <div class="gate__card paper">
-      <svg class="gate__die" aria-hidden="true" viewBox="0 0 24 24">
-        <rect x="3.2" y="3.2" width="17.6" height="17.6" rx="3.4" fill="none" stroke="currentColor" stroke-width="1.9"/>
-        <circle cx="8.4" cy="8.4" r="1.5" fill="currentColor"/>
-        <circle cx="15.6" cy="8.4" r="1.5" fill="currentColor"/>
-        <circle cx="12" cy="12" r="1.5" fill="currentColor"/>
-        <circle cx="8.4" cy="15.6" r="1.5" fill="currentColor"/>
-        <circle cx="15.6" cy="15.6" r="1.5" fill="currentColor"/>
-      </svg>
-      <h1 class="gate__title">Ular Tangga Modern</h1>
-      <p class="gate__text">Mengalihkan ke menu utama.</p>
-      <noscript><p class="gate__text">JavaScript nonaktif. Buka menu lewat tautan ini:</p></noscript>
-      <a class="btn btn-paint" href="views/menu.html">Buka Menu</a>
-    </div>
-  </main>
+  <div id="app"></div>
+  <div id="loader" class="loader">
+    <div class="loader__mark"></div>
+    <p class="loader__text">Menyiapkan meja…</p>
+    <div class="loader__bar"><span id="loader-fill"></span></div>
+  </div>
+  <script type="module" src="/src/main.ts"></script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js').catch(() => {});
+      });
+    }
+  </script>
 </body>
 </html>

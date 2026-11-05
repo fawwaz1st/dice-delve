@@ -1,0 +1,26 @@
+{
+  "name": "dice-delve",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Dice Delve — 3D stylized board-roguelike (dice, cards, procedural board).",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "three": "0.187.0",
+    "@dimforge/rapier3d-compat": "0.21.0",
+    "zustand": "5.0.16"
+  },
+  "devDependencies": {
+    "typescript": "7.0.2",
+    "vite": "8.3.6",
+    "@types/three": "0.187.0",
+    "eslint": "9.39.0",
+    "typescript-eslint": "8.50.0"
+  }
+}
