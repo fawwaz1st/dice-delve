@@ -1,4 +1,4 @@
-import { DataTexture, RedFormat, NearestFilter, MeshStandardMaterial, Color } from 'three/webgpu';
+import { DataTexture, RedFormat, NearestFilter, MeshStandardMaterial, MeshBasicMaterial, BackSide, Color, Mesh, Group } from 'three/webgpu';
 
 /** Palet 60/30/10: base gelap desaturated + aksen emissive saturasi tinggi. */
 export const PALETTE = {
@@ -46,4 +46,20 @@ export function toonMaterial(
     mat.emissiveIntensity = opts.emissiveIntensity ?? 0.6;
   }
   return mat;
+}
+
+/**
+ * Tambahkan outline (inverted hull) pada mesh anak grup.
+ * Memberi kesan ink/stylized yang deliberat, bukan default.
+ */
+export function addOutline(target: Group | Mesh, scale = 1.06, color = '#17110c'): void {
+  const outlineMat = new MeshBasicMaterial({ color: new Color(color), side: BackSide });
+  const add = (obj: Mesh) => {
+    const outline = new Mesh(obj.geometry, outlineMat);
+    outline.scale.setScalar(scale);
+    outline.raycast = () => {};
+    obj.add(outline);
+  };
+  if (target instanceof Mesh) add(target);
+  else target.traverse((child) => { if (child instanceof Mesh) add(child); });
 }

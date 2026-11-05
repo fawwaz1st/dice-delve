@@ -3,7 +3,7 @@ import { Board, todaySeed } from './Board.js';
 import { Piece } from './Piece.js';
 import { Run } from './Run.js';
 import { DiceManager, type Dice } from './Dice.js';
-import { toonMaterial } from '../render/Materials.js';
+import { toonMaterial, addOutline } from '../render/Materials.js';
 import { tween, Ease } from '../utils/tween.js';
 import { CARDS } from './Cards.js';
 import { audio } from '../audio/AudioEngine.js';
@@ -51,6 +51,7 @@ export class Game {
     const spikes = new Mesh(new IcosahedronGeometry(0.18, 0), toonMaterial('#2a1a24'));
     spikes.position.y = 1.25;
     g.add(spikes);
+    addOutline(g, 1.09, '#170d14');
     g.visible = false;
     return g;
   }

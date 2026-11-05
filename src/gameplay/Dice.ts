@@ -1,5 +1,5 @@
 import { Mesh, BoxGeometry, Group, Vector3, Quaternion } from 'three/webgpu';
-import { toonMaterial } from '../render/Materials.js';
+import { toonMaterial, addOutline } from '../render/Materials.js';
 import { tween, Ease } from '../utils/tween.js';
 
 /** Nilai per muka: indeks material BoxGeometry = [+X, -X, +Y, -Y, +Z, -Z]. */
@@ -49,6 +49,7 @@ export class DiceManager {
     mesh.receiveShadow = true;
     const group = new Group();
     group.add(mesh);
+    addOutline(mesh, 1.05, '#241a10');
     group.position.copy(position);
     const dice: Dice = { mesh: group, value: 1, rolling: false };
     this.dice.push(dice);

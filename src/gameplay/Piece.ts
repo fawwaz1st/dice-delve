@@ -1,5 +1,5 @@
 import { Group, Mesh, CapsuleGeometry, SphereGeometry, RingGeometry } from 'three/webgpu';
-import { toonMaterial } from '../render/Materials.js';
+import { toonMaterial, addOutline } from '../render/Materials.js';
 import { tween, Ease } from '../utils/tween.js';
 import type { Vector3 } from 'three/webgpu';
 
@@ -28,6 +28,9 @@ export class Piece {
     ring.rotation.x = -Math.PI / 2;
     ring.position.y = 0.06;
     this.group.add(ring);
+
+    // Outline ink untuk kesan stylized.
+    addOutline(this.group, 1.08, '#241a10');
   }
 
   hop(fromPos: Vector3, toPos: Vector3, duration = 340, done?: () => void): void {
