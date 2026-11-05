@@ -84,10 +84,10 @@ async function boot(): Promise<void> {
     while (el.log.children.length > 5) el.log.lastChild?.remove();
   }
 
-  const game = new Game(dice, board, {
-    onState: () => {
+  // Fungsi pemutakhir UI: dipanggil setiap giliran DAN setelah ganti papan.
+  const updateUI = (): void => {
       const s = game.run.state;
-      // Panel menang/kalah.
+      // Satu-satunya sumber kebenaran untuk panel akhir.
       if ((s.status === 'won' || s.status === 'dead') && !game.busy) {
         endPanel.hidden = false;
         if (s.status === 'won') {
@@ -98,6 +98,7 @@ async function boot(): Promise<void> {
             endPanel.hidden = true;
             const nb = game.nextFloor();
             rig.root.add(nb.group);
+            updateUI();
           };
         } else {
           endTitle.textContent = 'Kamu Tumbang';
@@ -107,17 +108,22 @@ async function boot(): Promise<void> {
             endPanel.hidden = true;
             const nb = game.restartBoard();
             rig.root.add(nb.group);
+            updateUI();
           };
         }
       } else {
         endPanel.hidden = true;
       }
+      // HUD selalu mencerminkan state terkini.
       el.hp.textContent = String(s.hp);
       el.gold.textContent = String(s.gold);
       el.floor.textContent = String(s.floor);
       el.diceValue.textContent = String(game.lastRoll);
       el.rollBtn.disabled = game.busy || s.status === 'won' || s.status === 'dead';
-    },
+  };
+
+  const game = new Game(dice, board, {
+    onState: updateUI,
     onToast: toast,
     onCombat: (text) => {
       log(text);

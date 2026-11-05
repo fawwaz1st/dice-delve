@@ -98,6 +98,12 @@ export class Game {
     return this.board.worldPos(t.gx, t.gz).setY(0.25);
   }
 
+  /** Set posisi: logika dan papan 3D bergerak bersamaan. */
+  setPosition(index: number): void {
+    this.run.state.position = index;
+    this.piece.place(this.tileWorld(index));
+  }
+
   async rollTurn(): Promise<void> {
     if (this.busy) return;
     const st = this.run.state;

@@ -54,12 +54,19 @@ export function toonMaterial(
  */
 export function addOutline(target: Group | Mesh, scale = 1.06, color = '#17110c'): void {
   const outlineMat = new MeshBasicMaterial({ color: new Color(color), side: BackSide });
-  const add = (obj: Mesh) => {
+  // Kumpulkan mesh target DULU sebelum menambah outline; kalau tidak,
+  // traverse akan mengunjungi outline yang baru ditambah dan me-recurse
+  // tanpa akhir (maksimal stack).
+  const meshes: Mesh[] = [];
+  if (target instanceof Mesh) {
+    meshes.push(target);
+  } else {
+    target.traverse((child) => { if (child instanceof Mesh) meshes.push(child); });
+  }
+  for (const obj of meshes) {
     const outline = new Mesh(obj.geometry, outlineMat);
     outline.scale.setScalar(scale);
     outline.raycast = () => {};
     obj.add(outline);
-  };
-  if (target instanceof Mesh) add(target);
-  else target.traverse((child) => { if (child instanceof Mesh) add(child); });
+  }
 }
