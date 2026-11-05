@@ -1,11 +1,12 @@
-"""Buat favicon.ico dan ikon PWA dari geometri yang sama dengan favicon.svg.
+"""Buat favicon.ico dan ikon PWA dengan PIL.
 
-Digambar langsung dengan PIL (tanpa rasterisasi SVG) supaya hasilnya tajam
+Digambar langsung dengan PIL (bukan rasterisasi SVG) supaya hasilnya tajam
 di setiap ukuran dan tidak butuh dependensi tambahan. Hasilnya:
 
 - assets/images/favicon.ico            (7 ukuran)
 - assets/images/icon-512.png           (ikon manifest)
-- assets/images/icon-192.png           (ikon manifest + apple-touch-icon)
+- assets/images/icon-192.png           (ikon manifest)
+- assets/images/icon-180.png           (apple-touch-icon iOS)
 - assets/images/icon-maskable-512.png  (varian maskable, zona aman 80%)
 
 Jalankan: python scripts/make-favicon.py
@@ -14,6 +15,9 @@ Jalankan: python scripts/make-favicon.py
 from pathlib import Path
 
 from PIL import Image, ImageDraw
+
+# Pillow >=10: _RESAMPLE deprecated.
+_RESAMPLE = getattr(Image, "Resampling", Image).LANCZOS
 
 ROOT = Path(__file__).resolve().parent.parent
 IMG_DIR = ROOT / "assets" / "images"
@@ -73,13 +77,14 @@ def build():
 
 def write_png_icons(icon):
     """Ikon PWA: PNG 512 & 192, plus varian maskable dengan latar penuh."""
-    icon.resize((512, 512), Image.LANCZOS).save(IMG_DIR / "icon-512.png")
-    icon.resize((192, 192), Image.LANCZOS).save(IMG_DIR / "icon-192.png")
+    icon.resize((512, 512), _RESAMPLE).save(IMG_DIR / "icon-512.png")
+    icon.resize((192, 192), _RESAMPLE).save(IMG_DIR / "icon-192.png")
+    icon.resize((180, 180), _RESAMPLE).save(IMG_DIR / "icon-180.png")
 
     # Maskable: latar kayu penuh, dadu di zona aman tengah (80%) agar
     # aman terhadap topeng lingkaran / squircle Android.
     maskable = Image.new("RGBA", (512, 512), WOOD_DARK)
-    inner = icon.resize((410, 410), Image.LANCZOS)
+    inner = icon.resize((410, 410), _RESAMPLE)
     maskable.alpha_composite(inner, ((512 - 410) // 2, (512 - 410) // 2))
     maskable.convert("RGB").save(IMG_DIR / "icon-maskable-512.png")
     print(

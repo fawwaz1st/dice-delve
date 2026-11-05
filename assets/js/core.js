@@ -63,18 +63,40 @@
    * live region "polite" yang tidak mengganggu alur fokus.
    */
   let narrateEl = null;
+  let narrateQueue = [];
+  let narrateTimer = null;
+  let lastNarrated = '';
+
+  function ensureNarrateEl() {
+    if (narrateEl) return narrateEl;
+    narrateEl = document.createElement('div');
+    narrateEl.className = 'sr-only';
+    narrateEl.id = 'live-region';
+    narrateEl.setAttribute('role', 'status');
+    narrateEl.setAttribute('aria-live', 'polite');
+    document.body.appendChild(narrateEl);
+    return narrateEl;
+  }
+
+  function flushNarrate() {
+    const next = narrateQueue.shift();
+    if (!next) { narrateTimer = null; return; }
+    lastNarrated = next;
+    const el = ensureNarrateEl();
+    el.textContent = '';
+    window.setTimeout(() => { el.textContent = next; }, 40);
+    narrateTimer = window.setTimeout(flushNarrate, 120);
+  }
+
+  /**
+   * Narasi untuk pembaca layar. Pesan identik berurutan diabaikan (dedup),
+   * pesan berbeda diantre supaya tidak saling menimpa.
+   */
   UT.narrate = (message) => {
-    if (!narrateEl) {
-      narrateEl = document.createElement('div');
-      narrateEl.className = 'sr-only';
-      narrateEl.id = 'live-region';
-      narrateEl.setAttribute('role', 'status');
-      narrateEl.setAttribute('aria-live', 'polite');
-      document.body.appendChild(narrateEl);
-    }
-    // Kosongkan lalu isi ulang: pesan yang sama tetap dibacakan ulang.
-    narrateEl.textContent = '';
-    window.setTimeout(() => { narrateEl.textContent = String(message); }, 40);
+    const text = String(message);
+    if (!text || text === lastNarrated) return;
+    narrateQueue.push(text);
+    if (!narrateTimer) flushNarrate();
   };
 
   /* ----------------------------------------------------------------------
@@ -118,8 +140,17 @@
       modal.dataset.utTrap = '1';
       modal.addEventListener('keydown', trapTab);
     }
-    const items = visibleFocusables(modal);
-    if (items.length) items[0].focus();
+    // Fokus ke judul dialog (bukan tombol Tutup) supaya SR membacakan nama dialog.
+    const heading = modal.querySelector('h1, h2, h3');
+    if (heading) {
+      if (!heading.hasAttribute('tabindex')) heading.setAttribute('tabindex', '-1');
+      heading.focus();
+    } else {
+      const items = visibleFocusables(modal);
+      if (items.length) items[0].focus();
+    }
+    // Latar di balik modal di-inert agar kursor virtual SR tidak menembus.
+    document.querySelectorAll('main, .topbar').forEach((el) => el.setAttribute('inert', ''));
   };
 
   UT.closeModal = (modal) => {
@@ -130,6 +161,7 @@
     }
     lastTrigger = null;
     document.body.style.overflow = '';
+    document.querySelectorAll('main, .topbar').forEach((el) => el.removeAttribute('inert'));
     // Beri tahu pemilik (mis. game.js) bahwa modal ditutup, agar giliran
     // AI yang sempat dijeda bisa dilanjutkan.
     try { document.dispatchEvent(new CustomEvent('ut:modalclose', { detail: { modal } })); } catch (e) { /* senyap */ }
@@ -161,6 +193,10 @@
     while (stack.children.length >= 4) stack.removeChild(stack.firstElementChild);
 
     stack.appendChild(slip);
+    // Toast penting (sukses/gagal) dinarasi; dedup di UT.narrate.
+    if (UT.narrate && (type === 'success' || type === 'error' || type === 'warning')) {
+      UT.narrate(message);
+    }
     setTimeout(() => {
       slip.classList.add('is-hiding');
       setTimeout(() => slip.remove(), 260);
@@ -180,6 +216,7 @@
   const SETTINGS_DEFAULT = {
     players: 2,
     mode: 'classic',
+    difficulty: 'normal',
     sound: true,
     music: true,
     haptic: true,
@@ -228,6 +265,9 @@
     settingsCache = {
       players: UT.clamp(parseInt(raw.players, 10) || 2, 2, 4),
       mode: raw.mode === 'speed' ? 'speed' : 'classic',
+      difficulty: raw.difficulty === 'mudah' || raw.difficulty === 'sulit'
+        ? raw.difficulty
+        : 'normal',
       sound: raw.sound !== false,
       music: raw.music !== false,
       haptic: raw.haptic !== false,
@@ -239,6 +279,9 @@
     const next = { ...UT.getSettings(), ...patch };
     next.players = UT.clamp(parseInt(next.players, 10) || 2, 2, 4);
     next.mode = next.mode === 'speed' ? 'speed' : 'classic';
+    next.difficulty = next.difficulty === 'mudah' || next.difficulty === 'sulit'
+      ? next.difficulty
+      : 'normal';
     next.sound = next.sound !== false;
     next.music = next.music !== false;
     next.haptic = next.haptic !== false;
@@ -290,6 +333,9 @@
       if (!raw) return null;
       const data = JSON.parse(raw);
       if (!data || !Array.isArray(data.players) || data.players.length < 2) return null;
+      // Validasi bentuk papan: ladders/snakes harus objek.
+      if (data.ladders && typeof data.ladders !== 'object') return null;
+      if (data.snakes && typeof data.snakes !== 'object') return null;
       return data;
     } catch (err) {
       console.warn('[UT] Simpanan permainan tidak terbaca:', err);

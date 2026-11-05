@@ -34,6 +34,7 @@ const PRECACHE = [
   'assets/js/menu.js',
   'assets/images/favicon.ico',
   'assets/images/favicon.svg',
+  'assets/images/icon-180.png',
   'assets/images/icon-192.png',
   'assets/images/icon-512.png',
   'assets/images/icon-maskable-512.png',
@@ -60,20 +61,27 @@ function offlineResponse(kind) {
   return new Response('', { status: 504, statusText: 'Offline' });
 }
 
-/** Ambil dari cache sebagai cadangan terakhir. */
+/** Ambil dari cache sebagai cadangan terakhir, sesuai jenis request. */
 function fromCache(request) {
+  const isDocument = request.mode === 'navigate' || /\.html?$/.test(new URL(request.url).pathname);
   return caches.match(request).then((hit) => {
     if (hit) return hit;
-    return caches.match('views/game.html').then((fallback) => fallback || offlineResponse(
-      request.mode === 'navigate' ? 'document' : 'asset'
-    ));
+    if (isDocument) {
+      return caches.match('views/game.html')
+        .then((fallback) => fallback || offlineResponse('document'));
+    }
+    // Aset: jangan kembalikan HTML untuk JS/CSS (MIME error).
+    return caches.match(request).then((h) => h || offlineResponse('asset'));
   });
 }
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(VERSION)
-      .then((cache) => cache.addAll(PRECACHE))
+      // Satu file gagal tidak membatalkan install (addAll all-or-nothing).
+      .then((cache) => Promise.all(
+        PRECACHE.map((url) => cache.add(url).catch(() => {}))
+      ))
       .then(() => self.skipWaiting())
   );
 });
@@ -123,7 +131,8 @@ self.addEventListener('fetch', (event) => {
   /* ---- Navigasi & berkas kode: network-first --------------------------- */
   if (event.request.mode === 'navigate' || CODE.test(url.pathname)) {
     event.respondWith(
-      fetch(event.request)
+      // cache: 'reload' melewati HTTP cache yang bisa menyajikan versi lama.
+      fetch(event.request, { cache: 'reload' })
         .then((res) => {
           if (res && res.ok) {
             const copy = res.clone();

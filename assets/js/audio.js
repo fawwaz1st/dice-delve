@@ -196,6 +196,12 @@
       blip(523, 0.12, { wave: 'triangle', vol: 0.24 });
       blip(784, 0.14, { wave: 'triangle', vol: 0.28, at: 0.1 });
     },
+
+    /* Giliranmu: dua ketukan lembut yang khas. */
+    yourturn() {
+      knock(0.22, 0, 1600);
+      knock(0.28, 0.14, 2100);
+    },
   };
 
   /* ----------------------------------------------------------------------
@@ -244,7 +250,8 @@
     if (!settings().music) return;
     if (ctx.state === 'suspended') ctx.resume().catch(() => {});
 
-    musicTrack = UT.pick(TRACKS);
+    musicTrack = UT.pick(musicIntensity === 'tense' ? [TRACKS[2]] : musicIntensity === 'calm' ? [TRACKS[1]] : TRACKS);
+    beatMultiplier = musicIntensity === 'calm' ? 1.25 : musicIntensity === 'tense' ? 0.72 : 1;
     musicStep = 0;
     musicOn = true;
     bgm.gain.cancelScheduledValues(ctx.currentTime);
@@ -267,15 +274,18 @@
 
   /** Ubah intensitas musik. Dipanggil dari game.js sesuai keadaan. */
   function setIntensity(level) {
-    if (!ctx) return;
+    // Simpan dulu: bila ctx belum dibuat, terapkan saat boot/startMusic.
     if (level === musicIntensity) return;
     musicIntensity = level;
+    if (!ctx) return;
     if (level === 'calm') beatMultiplier = 1.25;
     else if (level === 'tense') beatMultiplier = 0.72;
     else beatMultiplier = 1;
-    // Pilih trek yang cocok dengan intensitas.
+    // Pilih trek yang cocok dengan intensitas. Reset langkah agar
+    // perpindahan tidak melompat ke index nada baru.
     if (musicOn) {
       musicTrack = UT.pick(level === 'tense' ? [TRACKS[2]] : level === 'calm' ? [TRACKS[1]] : TRACKS);
+      musicStep = 0;
     }
   }
 

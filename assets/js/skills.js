@@ -98,8 +98,19 @@
 
   const BY_ID = Object.fromEntries(CATALOG.map((s) => [s.id, s]));
 
-  const HUMAN_HAND = 3;
-  const AI_HAND = 2;
+  /* Kartu yang menaruh efek aktif. Aturan: satu efek aktif per waktu —
+     memakai kartu buff baru menggantikan efek lama (keputusan, bukan tumpuk). */
+  const BUFF_SKILLS = new Set([
+    'double_roll', 'dice_boost', 'lucky_seven',
+    'ladder_boost', 'snake_immunity', 'extra_turn',
+  ]);
+
+  /* Ukuran tangan bergantung kesulitan: Mudah AI pasif, Sulit AI agresif. */
+  const HAND_BY_DIFFICULTY = {
+    mudah: { human: 3, ai: 1 },
+    normal: { human: 3, ai: 3 },
+    sulit: { human: 3, ai: 4 },
+  };
 
   /* ----------------------------------------------------------------------
      State
@@ -113,14 +124,28 @@
      Inisialisasi
      ---------------------------------------------------------------------- */
 
-  function init(players) {
+  /**
+   * @param {Array} players
+   * @param {{humanPick?: string}} [opts] humanPick: kartu pertama pilihan
+   *   pemain (draft 1-dari-3), sisanya diambil acak.
+   */
+  function init(players, opts) {
     hands = {};
     cooldowns = {};
     live = {};
 
+    const diff = (UT.getSettings && UT.getSettings().difficulty) || 'normal';
+    const hand = HAND_BY_DIFFICULTY[diff] || HAND_BY_DIFFICULTY.normal;
+    const pick = opts && opts.humanPick;
+
     players.forEach((p) => {
-      const size = p.isAI ? AI_HAND : HUMAN_HAND;
-      hands[p.id] = UT.shuffle(CATALOG).slice(0, size).map((s) => s.id);
+      const size = p.isAI ? hand.ai : hand.human;
+      if (!p.isAI && pick) {
+        const rest = UT.shuffle(CATALOG.filter((s) => s.id !== pick)).slice(0, Math.max(0, size - 1));
+        hands[p.id] = [pick, ...rest.map((s) => s.id)];
+      } else {
+        hands[p.id] = UT.shuffle(CATALOG).slice(0, size).map((s) => s.id);
+      }
       cooldowns[p.id] = {};
       live[p.id] = new Set();
     });
@@ -159,6 +184,24 @@
   }
 
   /**
+   * Pendaratan setelah ular/tangga dipertimbangkan (satu rantai).
+   * Dipakai agar "anti-rugi" membandingkan destinasi akhir, bukan sel mentah:
+   * di petak 20, dadu 5 mendarat di kaki tangga 25 -> naik ke 40;
+   * Pasti Enam memaksa 6 -> kepala ular 26 -> turun ke 12.
+   */
+  function landingAfterBoard(pos, steps, finish, board) {
+    let cell = landing(pos, steps, finish);
+    let guard = 0;
+    while (guard < 10) {
+      guard += 1;
+      if (board && board.ladders && board.ladders[cell]) { cell = board.ladders[cell]; continue; }
+      if (board && board.snakes && board.snakes[cell]) { cell = board.snakes[cell]; continue; }
+      break;
+    }
+    return cell;
+  }
+
+  /**
    * Terapkan efek pada nilai dadu. Mengembalikan nilai akhir.
    *
    * Tiga efek berdeskripsi "lemparan berikutnya" (Dadu Ganda, Dorongan Dadu,
@@ -190,9 +233,12 @@
     if (hasBoost && out < 6) { out = Math.min(6, out + 2); usedBoost = true; }
     if (hasSeven) { out = 6; usedSeven = true; }
 
-    // Efek tidak boleh merugikan: bandingkan pendaratan akhir.
-    if (out !== value && landing(pos, out, finish) < landing(pos, value, finish)) {
-      return value; // efek tetap aktif untuk lemparan berikutnya
+    // Efek tidak boleh merugikan: bandingkan destinasi setelah ular/tangga.
+    if (out !== value) {
+      const board = ctx && ctx.board;
+      const rawDest = landingAfterBoard(pos, value, finish, board);
+      const buffDest = landingAfterBoard(pos, out, finish, board);
+      if (buffDest < rawDest) return value; // efek tetap aktif untuk lemparan berikutnya
     }
 
     if (usedSeven) consume(playerId, 'lucky_seven');
@@ -302,15 +348,31 @@
     if (api.isBusy && api.isBusy()) {
       return { ok: false, message: 'Tunggu giliran selesai dulu.' };
     }
+    if (api.isPending && api.isPending()) {
+      return { ok: false, message: 'Tunggu efek sebelumnya selesai.' };
+    }
     const cd = getCooldown(playerId, skillId);
     if (cd > 0) {
       return { ok: false, message: `Masih cooldown ${cd} giliran.` };
     }
 
+    // Aturan: satu efek aktif per waktu. Kartu buff baru menggantikan
+    // efek lama — ini keputusan, bukan penumpukan.
+    let replaced = false;
+    if (BUFF_SKILLS.has(skillId) && live[playerId] && live[playerId].size > 0) {
+      live[playerId] = new Set();
+      replaced = true;
+    }
+
     const res = run(playerId, skill, api);
     if (res.ok) {
       cooldowns[playerId][skillId] = skill.cooldown;
+      const me = (api.getPlayers() || []).find((p) => p.id === playerId);
+      if (me && me.stats) me.stats.skills += 1;
       api.refreshUI();
+      if (replaced) {
+        UT.toast('Efek lama digantikan.', 'info', 1600);
+      }
     }
     return res;
   }
@@ -349,6 +411,10 @@
         return { ok: true, message: 'Giliran tambahan disiapkan.' };
 
       case 'teleport': {
+        // Larang di atas 85: mencegah "tombol menang" berulang dari zona akhir.
+        if (self.pos > 85) {
+          return { ok: false, message: 'Terlalu dekat dengan petak 100 — teleportasi dilarang.' };
+        }
         const dest = UT.clamp(self.pos + UT.randInt(5, 15), 1, api.finishCell());
         if (dest === self.pos) {
           return { ok: false, message: 'Sudah di petak akhir, teleportasi tidak berguna.' };
@@ -414,10 +480,13 @@
     const wins = (steps) => landing(self.pos, steps, finish) >= finish;
 
     /* Agresivitas kontinu: makin tertinggal, makin sering memakai skill.
-       Kepribadian menggeser baseline: agresif +0.12, hati-hati -0.12. */
+       Kepribadian menggeser baseline: agresif +0.12, hati-hati -0.12.
+       Kesulitan menggeser lagi: Mudah -0.10, Sulit +0.10. */
     const pers = self.personality || 'seimbang';
+    const diff = (UT.getSettings && UT.getSettings().difficulty) || 'normal';
+    const diffBias = diff === 'mudah' ? -0.10 : diff === 'sulit' ? 0.10 : 0;
     const baseAggr = pers === 'agresif' ? 0.46 : pers === 'hati-hati' ? 0.22 : 0.34;
-    const aggression = UT.clamp(baseAggr + behind * 0.022, 0.18, 0.82);
+    const aggression = UT.clamp(baseAggr + diffBias + behind * 0.022, 0.14, 0.86);
     if (Math.random() > aggression) return false;
 
     const weight = {
@@ -483,6 +552,16 @@
     const res = useSkill(playerId, choice.skill.id, api);
     if (res.ok) {
       UT.toast(`${api.nameOf(playerId)} memakai ${choice.skill.name}.`, 'info');
+
+      // Reaksi kepribadian (50% peluang) — membuat AI terasa hidup.
+      if (Math.random() < 0.5) {
+        const lines = pers === 'agresif'
+          ? ['Aku tidak memberi ruang!', 'Cepat atau lambat!', 'Ini milikku!']
+          : pers === 'hati-hati'
+            ? ['Hati-hati di sana...', 'Aku simpan kartuku.', 'Perlahan tapi pasti.']
+            : ['Semoga beruntung.', 'Langkah ini penting.', 'Kita lihat saja.'];
+        UT.toast(`${api.nameOf(playerId)}: "${UT.pick(lines)}"`, 'info', 2200);
+      }
       return true;
     }
     return false;
@@ -493,6 +572,7 @@
      ---------------------------------------------------------------------- */
 
   UT.Skills = {
+    CATALOG,
     init,
     getSkills,
     getCooldown,

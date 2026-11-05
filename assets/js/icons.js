@@ -237,6 +237,8 @@
     svg.setAttribute('focusable', 'false');
     const use = document.createElementNS('http://www.w3.org/2000/svg', 'use');
     use.setAttribute('href', `#i-${name}`);
+    // Fallback Safari <12.
+    use.setAttributeNS('http://www.w3.org/1999/xlink', 'xlink:href', `#i-${name}`);
     svg.appendChild(use);
     return svg;
   };

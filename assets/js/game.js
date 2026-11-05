@@ -53,6 +53,7 @@
     turns: 0,        // jumlah giliran, dipakai untuk statistik
     pending: null,   // janji resolusi pendaratan setelah skill
     gen: 0,          // token generasi: loop async lama berhenti saat papan diganti
+    fastForward: false, // percepat animasi AI saat tombol Lewati ditekan
   };
 
   /**
@@ -71,6 +72,7 @@
     el.loading = document.getElementById('loading-overlay');
     el.modeTag = document.getElementById('mode-tag');
     el.musicBtn = document.getElementById('music-btn');
+    el.sfxBtn = document.getElementById('sfx-btn');
     el.paper = document.getElementById('board-paper');
     el.grid = document.getElementById('board-grid');
     el.lines = document.getElementById('board-lines');
@@ -91,6 +93,16 @@
     el.winText = document.getElementById('win-text');
     el.resultPanel = document.getElementById('result-panel');
     el.resultText = document.getElementById('result-text');
+    el.skipBtn = document.getElementById('btn-skip');
+    el.diceFab = document.getElementById('dice-fab');
+    el.tutorial = document.getElementById('tutorial');
+    el.tutorialStep = document.getElementById('tutorial-step');
+    el.tutorialTitle = document.getElementById('tutorial-title');
+    el.tutorialText = document.getElementById('tutorial-text');
+    el.tutorialNext = document.getElementById('btn-tutorial-next');
+    el.tutorialSkip = document.getElementById('btn-tutorial-skip');
+    el.draftModal = document.getElementById('draft-modal');
+    el.draftOptions = document.getElementById('draft-options');
     el.rulesModal = document.getElementById('rules-modal');
     el.resumeModal = document.getElementById('resume-modal');
   }
@@ -100,7 +112,8 @@
      ---------------------------------------------------------------------- */
 
   const pace = () => (state.mode === 'speed' ? 0.45 : 1);
-  const wait = (ms) => UT.sleep(Math.round(ms * pace()));
+  // Lewati animasi AI: multiplier tambahan saat fast-forward aktif.
+  const wait = (ms) => UT.sleep(Math.round(ms * pace() * (state.fastForward ? 0.12 : 1)));
 
   const playerById = (id) => state.players.find((p) => p.id === id);
   const active = () => state.players[state.turn];
@@ -161,9 +174,9 @@
     const ladderAt = (n) => Object.hasOwn(ladders, n);
     const snakeAt = (n) => Object.hasOwn(snakes, n);
 
-    let guard = 0;
-    while (Object.keys(ladders).length < LADDERS && guard < 4000) {
-      guard += 1;
+    let ladderGuard = 0;
+    while (Object.keys(ladders).length < LADDERS && ladderGuard < 4000) {
+      ladderGuard += 1;
       // Terakhir: paksa satu tangga ke zona tinggi.
       const lastLadder = Object.keys(ladders).length === LADDERS - 1
         && !Object.values(ladders).some((to) => to > 78);
@@ -176,7 +189,7 @@
       used.add(to);
     }
 
-    guard = 0;
+    let guard = 0;
     while (Object.keys(snakes).length < SNAKES && guard < 4000) {
       guard += 1;
       const from = UT.randInt(24, FINISH - 2);
@@ -196,7 +209,8 @@
     }
 
     // Jaminan tangga zona akhir gagal terpenuhi? Regenerasi dari awal.
-    if (!Object.values(ladders).some((to) => to > 78) && guard < 3900) {
+    // (guard dari loop tangga, bukan loop ular.)
+    if (!Object.values(ladders).some((to) => to > 78) && ladderGuard < 3900) {
       return buildBoard();
     }
 
@@ -524,12 +538,24 @@
     el.turnDisc.appendChild(UT.icon(p.isAI ? 'robot' : 'person'));
     el.turnWho.textContent = p.name;
     el.turnHint.textContent = hintText();
+
+    // Tombol Lewati tampil selama seluruh giliran AI (bukan hanya phase 'ai').
+    if (el.skipBtn) {
+      const show = !state.over && p.isAI;
+      el.skipBtn.hidden = !show;
+      const label = el.skipBtn.querySelector('span');
+      if (label) label.textContent = state.fastForward ? 'Melaju...' : 'Lewati';
+    }
   }
 
   function renderDice() {
     const can = humanCanRoll();
     el.diceBtn.disabled = !can;
     el.diceBtn.setAttribute('aria-disabled', String(!can));
+    // Penanda "giliranmu": cincin berdenyut halus pada dadu.
+    el.diceBtn.classList.toggle('is-your-turn', can);
+    // FAB dadu mengikuti status yang sama.
+    if (el.diceFab) el.diceFab.disabled = !can;
   }
 
   function renderHand() {
@@ -553,7 +579,12 @@
       card.dataset.skill = skill.id;
       const blocked = cd > 0 || !canUse;
       card.setAttribute('aria-disabled', String(blocked));
-      card.setAttribute('aria-label', `${skill.name}: ${skill.desc}`);
+      const status = isLive
+        ? 'Efek aktif. '
+        : cd > 0
+          ? `Cooldown ${cd} giliran. `
+          : 'Siap dipakai. ';
+      card.setAttribute('aria-label', `${skill.name}: ${skill.desc} ${status}`);
 
       card.appendChild(UT.icon(skill.icon));
 
@@ -584,12 +615,37 @@
       card.addEventListener('mouseleave', closeTip);
       card.addEventListener('blur', closeTip);
 
-      // Konfirmasi 2-tap di layar sentuh: tap pertama = intip, tap kedua
-      // (dalam 2 detik) = pakai. Di desktop, hover sudah cukup intip.
-      let primed = false;
-      let primeTimer = null;
+      // Interaksi: tap = pakai (desktop & mobile). Long-press = intip
+      // (tooltip), pola standar di mobile game. Hover = intip di desktop.
+      let pressTimer = null;
+      let longPressed = false;
+
+      const startPress = () => {
+        longPressed = false;
+        if (pressTimer) clearTimeout(pressTimer);
+        pressTimer = setTimeout(() => {
+          longPressed = true;
+          card.classList.add('is-primed');
+          showTip();
+        }, 450);
+      };
+
+      const endPress = () => {
+        if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; }
+      };
+
+      card.addEventListener('pointerdown', startPress);
+      card.addEventListener('pointerup', endPress);
+      card.addEventListener('pointercancel', endPress);
+      card.addEventListener('pointerleave', endPress);
 
       card.addEventListener('click', () => {
+        if (longPressed) {
+          // Long-press hanya untuk intip; jangan pakai skill.
+          longPressed = false;
+          card.classList.remove('is-primed');
+          return;
+        }
         if (!humanCanRoll()) {
           UT.toast('Skill hanya bisa dipakai saat giliranmu.', 'warning', 1800);
           return;
@@ -599,27 +655,7 @@
           UT.toast(`Masih cooldown ${cd} giliran.`, 'warning', 1800);
           return;
         }
-
-        // Deteksi layar sentuh: tanpa hover, tap pertama tidak memakai.
-        const touch = window.matchMedia && window.matchMedia('(hover: none)').matches;
-        if (touch && !primed) {
-          primed = true;
-          card.classList.add('is-primed');
-          showTip();
-          if (primeTimer) clearTimeout(primeTimer);
-          primeTimer = setTimeout(() => {
-            primed = false;
-            card.classList.remove('is-primed');
-            closeTip();
-          }, 2000);
-          return;
-        }
-
-        if (primeTimer) clearTimeout(primeTimer);
-        primed = false;
-        card.classList.remove('is-primed');
         closeTip();
-
         const res = UT.Skills.useSkill(me.id, skill.id, skillApi);
         UT.Audio.play(res.ok ? 'skill' : 'reject');
         UT.toast(res.message, res.ok ? 'success' : 'warning');
@@ -638,7 +674,18 @@
     el.tip.appendChild(document.createTextNode(skill.desc));
     const meta = document.createElement('span');
     meta.className = 'skill-tip__meta';
-    meta.textContent = (isLive ? 'AKTIF · ' : '') + (cd > 0 ? `Cooldown ${cd} giliran` : 'Siap dipakai');
+
+    // Double-coding kelangkaan: teks + ikon, bukan hanya warna tepi.
+    const RARITY_ID = { common: 'Umum', uncommon: 'Tak Umum', rare: 'Langka', epic: 'Epik', legendary: 'Legendaris' };
+    const dot = document.createElement('span');
+    dot.className = 'skill-tip__dot';
+    dot.dataset.rarity = skill.rarity;
+    meta.appendChild(dot);
+    meta.appendChild(document.createTextNode(
+      (RARITY_ID[skill.rarity] || skill.rarity) + ' · '
+      + (isLive ? 'AKTIF · ' : '')
+      + (cd > 0 ? `Cooldown ${cd} giliran` : 'Siap dipakai')
+    ));
     el.tip.appendChild(meta);
     el.tip.classList.add('show');
 
@@ -706,6 +753,13 @@
   }
 
   function renderScores() {
+    // Urutkan baris berdasarkan posisi (peringkat), tie-break id.
+    const ranked = state.players.slice().sort((a, b) => b.pos - a.pos || a.id - b.id);
+    ranked.forEach((p) => {
+      const row = document.getElementById(`score-${p.id}`);
+      if (row && el.scoreList) el.scoreList.appendChild(row);
+    });
+
     const grid = document.getElementById('board-grid');
     if (grid) {
       const summary = state.players.map((p) => `${p.name} di ${p.pos}`).join(', ');
@@ -718,7 +772,13 @@
       const near = state.players.filter((p) => p.pos >= 94 && p.pos < FINISH);
       if (near.length) {
         banner.hidden = false;
-        banner.textContent = near.map((p) => `${p.name} butuh ${FINISH - p.pos}+ untuk menang!`).join(' ');
+        // Di 95-99, lemparan berlebih memantul — jadi harus TEPAT.
+        banner.textContent = near.map((p) => {
+          const need = FINISH - p.pos;
+          return need <= 5
+            ? `${p.name} butuh tepat ${need} untuk menang!`
+            : `${p.name} butuh ${need}+ untuk menang!`;
+        }).join(' ');
       } else {
         banner.hidden = true;
       }
@@ -758,6 +818,7 @@
     // AI butuh papan untuk menilai langkah; tanpa ini ia menembak buta.
     getBoard: () => ({ ladders: state.ladders, snakes: state.snakes }),
     isBusy: () => state.phase === 'rolling' || state.phase === 'moving',
+    isPending: () => Boolean(state.pending),
 
     moveTo(playerId, dest, message) {
       const p = playerById(playerId);
@@ -781,7 +842,9 @@
       UT.toast(`${a.name} bertukar posisi dengan ${b.name}.`, 'info');
       // Aturan harus konsisten: pemain yang berpindah ke kepala ular tetap
       // tergigit, dan yang mendarat di kaki tangga tetap naik.
-      state.pending = (state.pending || Promise.resolve()).then(() => settle(b.id, state.gen));
+      state.pending = (state.pending || Promise.resolve())
+        .then(() => settle(a.id, state.gen))
+        .then(() => settle(b.id, state.gen));
     },
 
     pushBack(targetId, steps) {
@@ -810,10 +873,13 @@
 
   function beginTurn() {
     state.phase = 'awaiting';
+    state.turns += 1; // tiap giliran dihitung, termasuk giliran kemenangan
     renderAll();
     save();
     const p = active();
     if (p && !state.over) UT.narrate(`Giliran ${p.name}${p.isAI ? ' (AI)' : ''}.`);
+    // Isyarat khas saat giliran manusia dimulai.
+    if (p && !p.isAI && !state.over) UT.Audio.play('yourturn');
 
     // Intensitas musik mengikuti keadaan: tenang bila pemimpin jauh di depan,
     // tegang bila ada yang di zona sprint.
@@ -848,7 +914,7 @@
     });
 
     state.turn = (state.turn + 1) % state.players.length;
-    state.turns += 1;
+    state.fastForward = false;
     UT.Audio.play('turn');
     beginTurn();
   }
@@ -864,7 +930,7 @@
     return out;
   }
 
-  async function walk(playerId, path, gen) {
+  async function walk(playerId, path, gen, isAI) {
     const quiet = UT.reducedMotion();
 
     for (const cell of path) {
@@ -880,7 +946,8 @@
         void piece.offsetWidth; // mulai ulang animasi
         piece.classList.add('is-hopping');
       }
-      UT.Audio.play('hop');
+      // Langkah AI lebih pelan agar tidak berisik (3 AI x 6 langkah/ronde).
+      UT.Audio.play(isAI ? 'step' : 'hop');
       await wait(quiet ? 60 : 215);
     }
   }
@@ -892,10 +959,10 @@
 
     // Hampir menang: bunyi chime hanya saat posisi meningkat (bukan saat
     // pion mundur akibat ular di zona akhir).
-    if (p.pos >= 94 && p.pos < FINISH && p.pos > (settle.prevPos || 0)) {
+    if (p.pos >= 94 && p.pos < FINISH && p.pos > (p.prevPos || 0)) {
       UT.Audio.play('nearwin');
     }
-    settle.prevPos = p.pos;
+    p.prevPos = p.pos;
 
     await wait(250);
     if (stale(gen)) return false;
@@ -906,6 +973,7 @@
       const dest = UT.clamp(top + bonus, 1, FINISH);
       UT.Audio.play('ladder');
       UT.haptic([22, 40, 34]);
+      if (p.stats) p.stats.ladders += 1;
       UT.narrate(`${p.name} naik tangga ke petak ${dest}.`);
       const ladderTexts = bonus > 0
         ? [`${p.name} naik tangga ke ${top}, ditambah ${bonus} jadi ${dest}.`]
@@ -924,6 +992,7 @@
         UT.Audio.play('snake');
         shakeFrame();
         UT.haptic([70, 50, 110]);
+        if (p.stats) p.stats.snakes += 1;
         UT.narrate(`${p.name} mendarat di kepala ular, turun ke petak ${bite}.`);
         UT.toast(`${p.name} mendarat di kepala ular, turun ke petak ${bite}.`, 'warning');
         p.pos = bite;
@@ -933,22 +1002,33 @@
         if (stale(gen)) return false;
       }
     } else if (state.snakes[p.pos]) {
-      // Zona Sprint (petak >= 90): ular "tidur" — hanya memundurkan 3,
-      // bukan 7-21. Akhir permainan harus terasa seperti akhir, bukan siksa.
-      if (p.pos >= 90) {
+      // Zona Sprint (petak >= 90): ular "lelah" — gigitannya setengah
+      // (bulatkan ke bawah), bukan penuh. Risiko tetap ada, drama tetap ada.
+      if (p.pos >= 90 && UT.Skills.takeSnakeShield(playerId)) {
+        UT.Audio.play('skill');
+        UT.toast(`${p.name} terlindung dari ular lelah di petak ${p.pos}.`, 'info');
+        UT.narrate(`${p.name} terlindung dari ular lelah di petak ${p.pos}.`);
+        renderAll();
+      } else if (p.pos >= 90) {
+        const tail = state.snakes[p.pos];
+        const half = Math.max(1, Math.floor((p.pos - tail) / 2));
         UT.Audio.play('snake');
-        UT.toast(`${p.name} melewati ular tidur di petak ${p.pos}, mundur 3.`, 'info');
-        p.pos = Math.max(1, p.pos - 3);
+        if (p.stats) p.stats.snakes += 1;
+        UT.toast(`${p.name} bertemu ular lelah di petak ${p.pos}, mundur ${half}.`, 'info');
+        p.pos = Math.max(1, p.pos - half);
         placePiece(playerId);
         renderAll();
         await wait(300);
         if (stale(gen)) return false;
         // Cek tangga di tujuan baru (aturan konsisten).
         if (state.ladders[p.pos]) {
+          const bonus = UT.Skills.takeLadderBonus(playerId);
           const top = state.ladders[p.pos];
+          const dest = UT.clamp(top + bonus, 1, FINISH);
           UT.Audio.play('ladder');
-          UT.toast(`${p.name} mendarat di tangga, naik ke petak ${top}.`, 'success');
-          p.pos = UT.clamp(top, 1, FINISH);
+          if (p.stats) p.stats.ladders += 1;
+          UT.toast(`${p.name} mendarat di tangga, naik ke petak ${dest}.`, 'success');
+          p.pos = dest;
           placePiece(playerId);
           renderAll();
           await wait(300);
@@ -964,8 +1044,9 @@
         UT.Audio.play('snake');
         shakeFrame();
         UT.haptic([70, 50, 110]);
-        // Hit-stop: jeda singkat agar gigitan terasa berat.
-        if (!UT.reducedMotion()) await wait(80);
+        if (p.stats) p.stats.snakes += 1;
+        // Hit-stop: jeda 120ms agar gigitan terasa berat (tidak terpengaruh pace).
+        if (!UT.reducedMotion()) await UT.sleep(120);
         const snakeTexts = [
           `${p.name} kena ular, turun ke petak ${dest}.`,
           `Ular di petak ${p.pos} rupanya lapar — ${p.name} turun ke ${dest}.`,
@@ -998,6 +1079,8 @@
 
   async function roll() {
     if (state.over) return;
+    // Guard sinkron: mencegah dua klik masuk roll() saat pending aktif.
+    if (state.phase === 'rolling' || state.phase === 'moving') return;
 
     const gen = state.gen;
 
@@ -1027,7 +1110,11 @@
     el.dice.classList.remove('is-tumbling');
 
     const raw = UT.randInt(1, 6);
-    const value = UT.Skills.modifyDice(p.id, raw, { pos: p.pos, finish: FINISH });
+    const value = UT.Skills.modifyDice(p.id, raw, {
+      pos: p.pos,
+      finish: FINISH,
+      board: { ladders: state.ladders, snakes: state.snakes },
+    });
     setFace(value);
     UT.haptic(26);
     UT.narrate(`${p.name} melempar dadu: ${value}.`);
@@ -1054,7 +1141,7 @@
     state.phase = 'moving';
     renderAll();
 
-    await walk(p.id, route(p.pos, value), gen);
+    await walk(p.id, route(p.pos, value), gen, p.isAI);
     if (stale(gen)) return;
     renderAll();
 
@@ -1100,6 +1187,12 @@
 
     await wait(state.mode === 'speed' ? 240 : 600);
     if (state.over || stale(gen)) return;
+    // Periksa ulang: modal bisa terbuka setelah pemeriksaan awal.
+    if (document.querySelector('.modal.show')) {
+      state.phase = 'awaiting';
+      renderAll();
+      return;
+    }
     await roll();
   }
 
@@ -1118,6 +1211,7 @@
     const humanWins = !winner.isAI;
     if (humanWins) {
       UT.Audio.play('win');
+      UT.Audio.play('combo');
       UT.haptic([90, 60, 90, 60, 160]);
       if (window.UT.confetti) UT.confetti.burst();
     } else {
@@ -1134,6 +1228,30 @@
 
     if (el.winTitle) el.winTitle.textContent = title;
     if (el.winText) el.winText.textContent = text;
+
+    // Match report: 3-4 statistik singkat — penutup emosional.
+    const report = document.getElementById('win-report');
+    if (report) {
+      const rows = [];
+      rows.push(['Giliran', String(state.turns)]);
+      if (human) {
+        rows.push(['Ular dilompati', String(human.stats ? human.stats.snakes : 0)]);
+        rows.push(['Tangga dipakai', String(human.stats ? human.stats.ladders : 0)]);
+        rows.push(['Skill dipakai', String(human.stats ? human.stats.skills : 0)]);
+      }
+      report.innerHTML = '';
+      const list = document.createElement('ul');
+      list.className = 'win-report';
+      rows.forEach(([k, v]) => {
+        const li = document.createElement('li');
+        const b = document.createElement('b');
+        b.textContent = v;
+        li.appendChild(b);
+        li.appendChild(document.createTextNode(' ' + k));
+        list.appendChild(li);
+      });
+      report.appendChild(list);
+    }
 
     // Tutup dialog lain dulu agar tidak menumpuk dua aria-modal=true.
     UT.$$('.modal.show').forEach(UT.closeModal);
@@ -1182,6 +1300,8 @@
       mode: state.mode,
       players: state.players.map((p) => ({
         id: p.id, name: p.name, isAI: p.isAI, color: p.color, pos: p.pos,
+        personality: p.personality || null,
+        stats: p.stats ? { ...p.stats } : { snakes: 0, ladders: 0, skills: 0 },
       })),
       turn: state.turn,
       turns: state.turns,
@@ -1198,8 +1318,11 @@
     state.players = data.players.map((p) => ({
       ...p,
       pos: UT.clamp(parseInt(p.pos, 10) || 1, 1, FINISH),
+      personality: p.personality || null,
+      stats: p.stats && typeof p.stats === 'object'
+        ? { snakes: 0, ladders: 0, skills: 0, ...p.stats }
+        : { snakes: 0, ladders: 0, skills: 0 },
     }));
-    state.turn = UT.clamp(state.turn, 0, state.players.length - 1);
     state.turn = UT.clamp(parseInt(data.turn, 10) || 0, 0, state.players.length - 1);
     state.turns = Math.max(0, parseInt(data.turns, 10) || 0);
     state.ladders = data.ladders || {};
@@ -1226,6 +1349,7 @@
       color: COLORS[i % COLORS.length],
       personality: i === 0 ? null : PERSONALITIES[(i - 1) % PERSONALITIES.length],
       pos: 1,
+      stats: { snakes: 0, ladders: 0, skills: 0 },
     }));
   }
 
@@ -1239,12 +1363,13 @@
     state.pending = null;
     state.winner = null;
     state.phase = 'idle';
+    state.fastForward = false;
     newGeneration();
 
     buildBoard();
     renderStatic();
     UT.Skills.init(state.players);
-    beginTurn();
+    showDraft();
   }
 
   function renderStatic() {
@@ -1258,6 +1383,7 @@
     if (el.diceLog) el.diceLog.textContent = 'Lempar dadu untuk mulai.';
     setFace(1);
     syncMusicBtn();
+    syncSfxBtn();
   }
 
   /* ----------------------------------------------------------------------
@@ -1274,6 +1400,18 @@
     el.musicBtn.title = label;
     el.musicBtn.setAttribute('aria-label', label);
     el.musicBtn.setAttribute('aria-pressed', String(on));
+  }
+
+  function syncSfxBtn() {
+    if (!el.sfxBtn) return;
+    const on = UT.getSettings().sound;
+    el.sfxBtn.innerHTML = '';
+    el.sfxBtn.appendChild(UT.icon(on ? 'music-on' : 'music-off'));
+    el.sfxBtn.classList.toggle('is-off', !on);
+    const label = on ? 'Matikan efek suara' : 'Nyalakan efek suara';
+    el.sfxBtn.title = label;
+    el.sfxBtn.setAttribute('aria-label', label);
+    el.sfxBtn.setAttribute('aria-pressed', String(on));
   }
 
   function toggleMusic() {
@@ -1304,6 +1442,15 @@
     });
 
     el.musicBtn.addEventListener('click', toggleMusic);
+
+    if (el.sfxBtn) {
+      el.sfxBtn.addEventListener('click', () => {
+        UT.saveSettings({ sound: !UT.getSettings().sound });
+        syncSfxBtn();
+        UT.Audio.play('press');
+        UT.toast(UT.getSettings().sound ? 'Efek suara dinyalakan.' : 'Efek suara dimatikan.', 'info', 1500);
+      });
+    }
 
     const byId = (id) => document.getElementById(id);
 
@@ -1355,6 +1502,10 @@
           // Tidak boleh ditutup sembarangan: pilih lanjut atau mulai baru.
           return;
         }
+        if (m === el.draftModal) {
+          // Draft wajib dipilih; tidak bisa ditutup dulu.
+          return;
+        }
         if (m === el.winModal && state.over) {
           // Izinkan menutup kartu menang, panel hasil tetap muncul.
           UT.closeModal(m);
@@ -1375,10 +1526,40 @@
     const resultMenu = byId('btn-result-menu');
     if (resultMenu) resultMenu.addEventListener('click', () => { window.location.href = 'menu.html'; });
 
+    // FAB dadu (mobile): memanggil roll() seperti tombol dadu utama.
+    if (el.diceFab) {
+      el.diceFab.addEventListener('click', () => {
+        if (state.over) return;
+        if (state.phase === 'rolling' || state.phase === 'moving' || state.phase === 'ai') return;
+        if (!humanCanRoll()) {
+          UT.Audio.play('reject');
+          UT.toast('Belum giliranmu.', 'warning', 1500);
+          return;
+        }
+        roll();
+      });
+    }
+
+    // Lewati animasi AI: percepat semua wait() selama giliran AI ini.
+    if (el.skipBtn) {
+      el.skipBtn.addEventListener('click', () => {
+        state.fastForward = true;
+        el.skipBtn.textContent = 'Melaju...';
+        UT.Audio.play('press');
+      });
+    }
+
+    // Tutorial didaftarkan di sini; ditampilkan setelah dialog lain selesai.
+    bindTutorial();
+
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') {
         if (el.resumeModal && el.resumeModal.classList.contains('show')) {
           // Escape diabaikan: wajib pilih Lanjutkan / Mulai Baru.
+          return;
+        }
+        if (el.draftModal && el.draftModal.classList.contains('show')) {
+          // Escape diabaikan: draft wajib dipilih.
           return;
         }
         if (el.winModal && el.winModal.classList.contains('show')) {
@@ -1388,11 +1569,15 @@
         UT.$$('.modal.show').forEach(UT.closeModal);
         return;
       }
+      const uiBlocked = Boolean(document.querySelector('.modal.show'))
+        || Boolean(el.tutorial && el.tutorial.classList.contains('show'));
       if (e.key === 'm' || e.key === 'M') {
+        if (uiBlocked) return;
         toggleMusic();
         return;
       }
       if (e.key === 'r' || e.key === 'R') {
+        if (uiBlocked) return;
         if (state.phase === 'rolling' || state.phase === 'moving' || state.phase === 'ai') return;
         if (confirm('Papan baru? Progres saat ini hilang.')) {
           UT.Audio.play('press');
@@ -1436,6 +1621,120 @@
   }
 
   /* ----------------------------------------------------------------------
+     Draft kartu awal (keputusan pertama)
+     ---------------------------------------------------------------------- */
+
+  function showDraft() {
+    if (!el.draftModal || !el.draftOptions) { beginTurn(); return; }
+    var pool = UT.shuffle(UT.Skills.CATALOG).slice(0, 3);
+    el.draftOptions.innerHTML = '';
+
+    pool.forEach(function (skill) {
+      var card = document.createElement('button');
+      card.type = 'button';
+      card.className = 'draft-card';
+      card.dataset.skill = skill.id;
+      card.dataset.rarity = skill.rarity;
+
+      var icon = UT.icon(skill.icon);
+      icon.setAttribute('aria-hidden', 'true');
+      card.appendChild(icon);
+
+      var name = document.createElement('span');
+      name.className = 'draft-card__name';
+      name.textContent = skill.name;
+      card.appendChild(name);
+
+      var desc = document.createElement('span');
+      desc.className = 'draft-card__desc';
+      desc.textContent = skill.desc;
+      card.appendChild(desc);
+
+      card.addEventListener('click', function () {
+        UT.Skills.init(state.players, { humanPick: skill.id });
+        UT.closeModal(el.draftModal);
+        UT.Audio.play('skill');
+        UT.toast('Kamu memilih ' + skill.name + '.', 'success');
+        beginTurn();
+        maybeShowTutorial();
+      });
+
+      el.draftOptions.appendChild(card);
+    });
+
+    const skip = document.getElementById('btn-draft-skip');
+    if (skip) {
+      skip.addEventListener('click', () => {
+        UT.closeModal(el.draftModal);
+        beginTurn();
+      });
+    }
+
+    UT.openModal(el.draftModal);
+  }
+  /* ----------------------------------------------------------------------
+     Tutorial (permainan pertama)
+     ---------------------------------------------------------------------- */
+
+  const TUTORIAL_STEPS = [
+    {
+      step: 'Langkah 1 dari 3',
+      title: 'Lempar dadu',
+      text: 'Klik dadu (atau tekan Spasi) saat giliranmu. Pion melompat otomatis ke petak tujuan.',
+    },
+    {
+      step: 'Langkah 2 dari 3',
+      title: 'Kartu skill',
+      text: 'Kamu memegang kartu skill. Ketuk kartu untuk memakainya; tekan tahan untuk melihat penjelasan.',
+    },
+    {
+      step: 'Langkah 3 dari 3',
+      title: 'Capai petak 100',
+      text: 'Naik tangga, hindari ular. Pemain pertama yang sampai di petak 100 menang. Selamat bermain!',
+    },
+  ];
+
+  let tutorialIndex = 0;
+
+  function bindTutorial() {
+    if (!el.tutorial || !el.tutorialNext) return;
+    el.tutorialNext.addEventListener('click', () => {
+      tutorialIndex += 1;
+      if (tutorialIndex >= TUTORIAL_STEPS.length) {
+        endTutorial();
+        return;
+      }
+      showTutorialStep();
+    });
+    el.tutorialSkip.addEventListener('click', endTutorial);
+  }
+
+  /** Tampilkan tutorial sekali, setelah dialog lain selesai. */
+  function maybeShowTutorial() {
+    if (!el.tutorial || !el.tutorialNext) return;
+    let done = false;
+    try { done = localStorage.getItem('ut.tutorial.done') === '1'; } catch (e) { /* senyap */ }
+    if (done) return;
+    tutorialIndex = 0;
+    showTutorialStep();
+  }
+
+  function showTutorialStep() {
+    const s = TUTORIAL_STEPS[tutorialIndex];
+    if (!s || !el.tutorial) return;
+    if (el.tutorialStep) el.tutorialStep.textContent = s.step;
+    if (el.tutorialTitle) el.tutorialTitle.textContent = s.title;
+    if (el.tutorialText) el.tutorialText.textContent = s.text;
+    if (el.tutorialNext) el.tutorialNext.textContent = tutorialIndex === TUTORIAL_STEPS.length - 1 ? 'Mulai Main' : 'Lanjut';
+    UT.openModal(el.tutorial);
+  }
+
+  function endTutorial() {
+    if (el.tutorial) UT.closeModal(el.tutorial);
+    try { localStorage.setItem('ut.tutorial.done', '1'); } catch (e) { /* senyap */ }
+  }
+
+  /* ----------------------------------------------------------------------
      Mulai
      ---------------------------------------------------------------------- */
 
@@ -1462,6 +1761,7 @@
         // Niat sudah dinyatakan di menu: lanjutkan tanpa menanyakan lagi.
         beginTurn();
         UT.toast('Melanjutkan permainan tersimpan.', 'info');
+        maybeShowTutorial();
       } else {
         UT.openModal(el.resumeModal);
 
@@ -1469,6 +1769,7 @@
           UT.closeModal(el.resumeModal);
           beginTurn();
           UT.toast('Melanjutkan permainan tersimpan.', 'info');
+          maybeShowTutorial();
         });
 
         document.getElementById('btn-restart').addEventListener('click', () => {
@@ -1476,6 +1777,14 @@
           UT.clearGame();
           startFresh();
         });
+
+        const later = document.getElementById('btn-later');
+        if (later) {
+          later.addEventListener('click', () => {
+            // Simpanan tetap ada; pemain bisa lanjutkan lewat menu.
+            UT.closeModal(el.resumeModal);
+          });
+        }
       }
     } else {
       startFresh();

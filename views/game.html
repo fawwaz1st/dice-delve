@@ -14,7 +14,7 @@
   <link rel="icon" href="../assets/images/favicon.ico" sizes="any" type="image/x-icon">
   <link rel="icon" href="../assets/images/favicon.svg" type="image/svg+xml">
   <link rel="manifest" href="../manifest.webmanifest">
-  <link rel="apple-touch-icon" href="../assets/images/icon-192.png">
+  <link rel="apple-touch-icon" href="../assets/images/icon-180.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=Karla:wght@400;600;700&family=Space+Mono:wght@700&display=swap" rel="stylesheet">
@@ -52,6 +52,7 @@
       </div>
 
       <div class="topbar__actions">
+        <button type="button" class="icon-btn" id="sfx-btn" title="Efek suara" aria-label="Efek suara" aria-pressed="true"></button>
         <button type="button" class="icon-btn" id="music-btn" title="Musik" aria-label="Musik" aria-pressed="true"></button>
         <button type="button" class="icon-btn" id="btn-rules" title="Cara bermain" aria-label="Buka cara bermain">
           <svg aria-hidden="true" width="19" height="19" viewBox="0 0 24 24"><use href="#i-help"></use></svg>
@@ -85,6 +86,10 @@
           <p class="dice-log" id="dice-log">Lempar dadu untuk mulai.</p>
           <span class="dice-result" id="dice-result" aria-hidden="true"></span>
           <p class="almost-banner" id="almost-banner" hidden></p>
+          <button type="button" class="skip-ai" id="btn-skip" hidden>
+            <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24"><use href="#i-play"></use></svg>
+            <span>Lewati</span>
+          </button>
         </div>
 
         <!-- Panel hasil: muncul saat permainan selesai, agar menutup modal
@@ -136,7 +141,38 @@
     </main>
   </div>
 
-  <div class="skill-tip paper" id="skill-tip" role="tooltip"></div>
+  <div class="skill-tip paper" id="skill-tip" aria-hidden="true"></div>
+
+  <!-- FAB dadu: aksi utama di jangkauan jempol (mobile saja). -->
+  <button type="button" class="dice-fab" id="dice-fab" aria-label="Lempar dadu">
+    <svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24"><use href="#i-dice"></use></svg>
+    <span>Lempar</span>
+  </button>
+
+  <!-- Draft kartu awal: pilih 1 dari 3 (keputusan pertama). -->
+  <div class="modal" id="draft-modal" role="dialog" aria-modal="true" aria-labelledby="draft-title">
+    <div class="modal-card paper">
+      <h2 class="draft__title" id="draft-title">Pilih kartu pertamamu</h2>
+      <p class="setting__hint">Kartu pilihanmu jadi kartu pertama. Dua kartu lain diambil acak.</p>
+      <div class="draft__options" id="draft-options"></div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-wood" id="btn-draft-skip">Lewati</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tutorial 3 langkah (hanya permainan pertama) -->
+  <div class="modal tutorial" id="tutorial" role="dialog" aria-modal="true" aria-labelledby="tutorial-title">
+    <div class="modal-card paper tutorial__card">
+      <p class="tutorial__step" id="tutorial-step"></p>
+      <h2 class="tutorial__title" id="tutorial-title"></h2>
+      <p class="tutorial__text" id="tutorial-text"></p>
+      <div class="tutorial__actions modal-actions">
+        <button type="button" class="btn btn-paint" id="btn-tutorial-next">Lanjut</button>
+        <button type="button" class="btn btn-wood" id="btn-tutorial-skip">Lewati</button>
+      </div>
+    </div>
+  </div>
 
   <!-- Kartu kemenangan -->
   <div class="modal" id="win-modal" role="dialog" aria-modal="true" aria-labelledby="win-title">
@@ -144,6 +180,7 @@
       <svg class="win-sheet__crest" aria-hidden="true" viewBox="0 0 24 24"><use href="#i-trophy"></use></svg>
       <h2 class="win-sheet__title" id="win-title">Pemain menang!</h2>
       <p class="win-sheet__text" id="win-text"></p>
+      <div class="win-report-wrap" id="win-report"></div>
       <div class="modal-actions">
         <button type="button" class="btn btn-paint" id="btn-again">
           <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24"><use href="#i-reset"></use></svg>
@@ -186,9 +223,9 @@
       <div class="modal-section">
         <h3>Skill</h3>
         <ul>
-          <li>Tiga kartu acak untukmu, dua untuk setiap AI.</li>
+          <li>Tiga kartu acak untukmu; AI memegang 1-4 kartu tergantung kesulitan.</li>
           <li>Hanya bisa dimainkan saat giliranmu, satu efek aktif per waktu.</li>
-          <li>Angka merah di pojok kartu adalah sisa cooldown.</li>
+          <li>Angka merah di pojok kartu adalah sisa cooldown; tanda <strong>!</strong> berarti efek sedang aktif.</li>
         </ul>
       </div>
 
@@ -216,6 +253,12 @@
         <button type="button" class="btn btn-wood" id="btn-restart">
           <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24"><use href="#i-reset"></use></svg>
           <span>Mulai Baru</span>
+        </button>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-wood" id="btn-later">
+          <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24"><use href="#i-close"></use></svg>
+          <span>Nanti Saja</span>
         </button>
       </div>
     </div>

@@ -32,6 +32,11 @@ Konsekuensi teknis:
 - Hingga 3 lawan AI yang juga memainkan kartu skill.
 - 10 kartu skill (Dadu Ganda, Pacu Tangga, Perisai Ular, Teleportasi, Tukar Posisi, dan lainnya) dengan cooldown.
 - Mode Cepat mempersingkat animasi dan jeda berpikir AI.
+- Kesulitan Mudah/Normal/Sulit: mengubah jumlah kartu AI (1/3/4) dan agresivitasnya.
+- Draft kartu awal: pilih 1 dari 3 kartu sebagai keputusan pertama.
+- Tutorial 3 langkah saat permainan pertama.
+- Pintasan keyboard: Spasi lempar, 1-3 pakai kartu, M musik, R papan baru.
+- FAB "Lempar" di mobile untuk jangkauan jempol.
 - Simpanan otomatis: bila tab tertutup, tawaran lanjut muncul saat dibuka lagi.
 - Suara dan musik disintesis dengan Web Audio API, tanpa berkas audio.
 - Getaran haptic berbeda per peristiwa (lempar, tangga, ular, menang), bisa dimatikan.
@@ -92,7 +97,8 @@ Regenerasi ikon (favicon + PNG manifest) setelah mengubah palet:
     │   └── images/
     │       ├── favicon.ico     # Dibuat oleh scripts/make-favicon.py
     │       ├── favicon.svg
-    │       ├── icon-192.png    # Ikon manifest PWA + apple-touch-icon
+    │       ├── icon-180.png    # apple-touch-icon iOS
+    │       ├── icon-192.png    # Ikon manifest PWA
     │       ├── icon-512.png
     │       └── icon-maskable-512.png
     ├── scripts/
@@ -118,8 +124,7 @@ Semua modul berbagi satu namespace window.UT; tidak ada variabel global yang boc
 
 - Multiplayer online lewat WebSocket atau WebRTC
 - Tema papan dan pion yang bisa dipilih
-- Tingkat kesulitan AI
-- PWA agar bisa dimainkan offline (selesai)
+- Papan harian ber-seed dan mutator
 - Mode turnamen dengan bagan pertandingan
 
 ## Kontribusi

@@ -58,7 +58,6 @@
 
   function tick() {
     if (!ctx || !canvas) return;
-    fitCanvas();
     const W = window.innerWidth;
     const H = window.innerHeight;
     ctx.clearRect(0, 0, W, H);

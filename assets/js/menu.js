@@ -17,6 +17,7 @@
     el.rulesModal = document.getElementById('rules-modal');
     el.playerRow = document.getElementById('opt-players');
     el.modeRow = document.getElementById('opt-mode');
+    el.difficultyRow = document.getElementById('opt-difficulty');
     el.soundSwitch = document.getElementById('sw-sound');
     el.musicSwitch = document.getElementById('sw-music');
     el.hapticSwitch = document.getElementById('sw-haptic');
@@ -64,6 +65,12 @@
       b.setAttribute('aria-pressed', String(b.dataset.value === cfg.mode));
     });
 
+    if (el.difficultyRow) {
+      UT.$$('.option', el.difficultyRow).forEach((b) => {
+        b.setAttribute('aria-pressed', String(b.dataset.value === cfg.difficulty));
+      });
+    }
+
     el.soundSwitch.setAttribute('aria-checked', String(cfg.sound));
     el.musicSwitch.setAttribute('aria-checked', String(cfg.music));
     if (el.hapticSwitch) el.hapticSwitch.setAttribute('aria-checked', String(cfg.haptic));
@@ -85,6 +92,16 @@
       renderSettings();
       UT.Audio.play('press');
     });
+
+    if (el.difficultyRow) {
+      el.difficultyRow.addEventListener('click', (e) => {
+        const b = e.target.closest('.option');
+        if (!b) return;
+        UT.saveSettings({ difficulty: b.dataset.value });
+        renderSettings();
+        UT.Audio.play('press');
+      });
+    }
 
     el.soundSwitch.addEventListener('click', () => {
       UT.saveSettings({ sound: !UT.getSettings().sound });
@@ -140,7 +157,8 @@
     UT.Audio.play('press');
     if (el.loading) el.loading.classList.add('show');
     const target = resume ? 'game.html?resume=1' : 'game.html';
-    setTimeout(() => { window.location.href = target; }, 600);
+    // Umpan balik tap saja; halaman game sudah ringan (tanpa bundler).
+    setTimeout(() => { window.location.href = target; }, 120);
   }
 
   /* ----------------------------------------------------------------------
@@ -189,8 +207,22 @@
     bindSettings();
     bindModals();
 
+    // Bila ada simpanan, tawarkan Lanjutkan sebagai aksi terpisah.
+    // "Mulai Permainan" selalu berarti permainan baru.
+    const continueBtn = document.getElementById('btn-continue');
+    const continueSub = document.getElementById('continue-sub');
+    const save = UT.loadGame();
+    if (continueBtn && save) {
+      continueBtn.hidden = false;
+      if (continueSub) {
+        const who = save.players.map((p) => p.name + ' di ' + p.pos).slice(0, 2).join(', ');
+        continueSub.textContent = save.players.length + ' pemain, ' + who + '.';
+      }
+      continueBtn.addEventListener('click', () => goToGame(true));
+    }
+
     document.getElementById('btn-start').addEventListener('click', () => {
-      if (!offerResume()) goToGame(false);
+      goToGame(false);
     });
 
     // Segarkan statistik saat kembali lewat cache riwayat.
