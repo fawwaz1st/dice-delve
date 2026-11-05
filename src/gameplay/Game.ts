@@ -7,8 +7,17 @@ import { toonMaterial, addOutline } from '../render/Materials.js';
 import { tween, Ease } from '../utils/tween.js';
 import { CARDS } from './Cards.js';
 import { audio } from '../audio/AudioEngine.js';
+import { Particles } from '../fx/Particles.js';
+import { DamageNumbers } from '../fx/DamageNumbers.js';
+import { CameraRig } from '../fx/CameraRig.js';
 
 type ToastKind = 'info' | 'success' | 'warning' | 'error';
+
+export interface GameFX {
+  particles: Particles;
+  dmg: DamageNumbers;
+  cam: CameraRig;
+}
 
 export interface GameEvents {
   onState: () => void;
@@ -24,13 +33,15 @@ export class Game {
   private die!: Dice;
   readonly tomb: Group;
   private readonly events: GameEvents;
+  readonly fx: GameFX;
   busy = false;
   lastRoll = 1;
 
-  constructor(dice: DiceManager, board: Board, events: GameEvents) {
+  constructor(dice: DiceManager, board: Board, events: GameEvents, fx: GameFX) {
     this.dice = dice;
     this.board = board;
     this.events = events;
+    this.fx = fx;
     this.run = new Run();
     this.piece = new Piece();
     this.tomb = this.spawnTomb();
@@ -56,8 +67,9 @@ export class Game {
     return g;
   }
 
-  start(): void {
+  start(bonuses?: { maxHp: number; damage: number; diceBonus: number; goldMultiplier: number }): void {
     this.run.start(todaySeed());
+    if (bonuses) this.run.applyMetaBonuses(bonuses.maxHp, bonuses.damage, bonuses.diceBonus, bonuses.goldMultiplier);
     this.piece.place(this.tileWorld(0));
     this.die = this.dice.spawn(new Vector3(4, 4, 4));
   }
@@ -84,8 +96,9 @@ export class Game {
     this.piece.place(this.tileWorld(0));
   }
 
-  restartBoard(): Board {
+  restartBoard(bonuses?: { maxHp: number; damage: number; diceBonus: number; goldMultiplier: number }): Board {
     this.run.start(this.run.state.seed);
+    if (bonuses) this.run.applyMetaBonuses(bonuses.maxHp, bonuses.damage, bonuses.diceBonus, bonuses.goldMultiplier);
     const newBoard = this.rebuildBoard();
     this.piece.place(this.tileWorld(0));
     this.run.start(this.run.state.seed);
@@ -135,6 +148,7 @@ export class Game {
         const fromPos = this.tileWorld(i - 1);
         const toPos = this.tileWorld(i);
         audio.hop();
+        this.fx.cam.follow(toPos);
         this.piece.hop(fromPos, toPos, 300, step);
       };
       step();
@@ -155,12 +169,19 @@ export class Game {
         const res = this.run.resolveTreasure(Math.random);
         audio.coin();
         if (res.card) audio.card();
+        const p = this.tileWorld(st.position).setY(0.6);
+        this.fx.particles.burst(p, { count: 30, color: '#ffb000', speed: 3, up: 3 });
+        this.fx.dmg.spawn(p, res.gold, 'gold');
         this.toastAt(res.card ? 'Harta: +' + res.gold + ' emas, kartu ' + CARDS[res.card].name + '!' : 'Harta: +' + res.gold + ' emas.', res.card ? 'success' : 'info');
         break;
       }
       case 'trap': {
         const dmg = this.run.resolveTrap(Math.random);
         audio.hurt();
+        const tp = this.tileWorld(st.position).setY(0.6);
+        this.fx.particles.burst(tp, { count: 22, color: '#ff6a2a', speed: 3 });
+        this.fx.dmg.spawn(tp, dmg, 'hurt');
+        this.fx.cam.addTrauma(0.4);
         this.toastAt('Jebakan! Kamu menerima ' + dmg + ' damage.', 'error');
         break;
       }
@@ -170,10 +191,16 @@ export class Game {
         this.toastAt(card ? 'Membeli ' + CARDS[card].name + ' (25 emas).' : 'Tidak ada yang bisa dibeli (butuh 25 emas).', card ? 'info' : 'warning');
         break;
       }
-      case 'rest':
+      case 'rest': {
+        const before = st.hp;
         this.run.heal(8);
+        const healed = st.hp - before;
+        const rp = this.tileWorld(st.position).setY(0.6);
+        this.fx.particles.burst(rp, { count: 20, color: '#7ddc3f', speed: 1.5, up: 2.5, life: 1.1, gravity: 0.5 });
+        if (healed > 0) this.fx.dmg.spawn(rp, healed, 'heal');
         this.toastAt('Istirahat: +8 HP.', 'success');
         break;
+      }
       case 'start':
         break;
     }
@@ -201,6 +228,10 @@ export class Game {
     this.tomb.visible = true;
     this.tomb.position.set(here.x + 1.6, 0, here.z);
     this.tomb.rotation.y = -Math.PI / 2;
+    this.fx.cam.setFocus(0.62);
+    this.fx.cam.follow(here.clone().lerp(new Vector3(here.x + 1.6, 0, here.z), 0.5));
+    this.fx.particles.motes(new Vector3(here.x + 1.6, 0.8, here.z), 10);
+    audio.setIntensity(2);
     this.toastAt('Menghadapi ' + m.name + ' (HP ' + m.maxHp + ', ATK ' + m.atk + ', DEF ' + m.def + ').', 'warning');
     while (m.hp > 0 && st.hp > 0) {
       const combatValue = await this.dice.roll(this.die);
@@ -208,11 +239,21 @@ export class Game {
       const res = this.run.combatRound(combatValue);
       audio.hit();
       this.flashMonster();
+      {
+        const mp = this.tomb.position.clone().setY(0.7);
+        if (res.playerDamage > 0) {
+          this.fx.particles.burst(mp, { count: 26, color: '#ff6a2a', speed: 3.5, up: 2 });
+          this.fx.dmg.spawn(mp, res.playerDamage, 'player');
+        }
+      }
       this.events.onCombat(res.playerDamage > 0 ? m.name + ' menerima ' + res.playerDamage + ' damage. Sisa ' + m.hp + '/' + m.maxHp + '.' : m.name + ' menahan serangan (DEF ' + m.def + ').');
       await this.hitStop(120);
       if (m.hp <= 0) break;
       if (res.monsterDamage > 0) {
         audio.hurt();
+        this.fx.dmg.spawn(this.piece.group.position.clone().setY(1.2), res.monsterDamage, 'hurt');
+        this.fx.particles.burst(this.piece.group.position.clone().setY(0.7), { count: 14, color: '#ff3b5c', speed: 2 });
+        this.fx.cam.addTrauma(0.55);
         this.events.onCombat(m.name + ' menyerang: kamu menerima ' + res.monsterDamage + ' damage.');
         this.shakePiece();
       }
@@ -220,9 +261,14 @@ export class Game {
     }
     if (m.hp <= 0 && st.hp > 0) {
       this.run.onMonsterDefeated(tier);
+      const ep = this.tomb.position.clone().setY(0.6);
+      this.fx.particles.burst(ep, { count: 40, color: '#8f6bff', speed: 4, up: 4, life: 1.2 });
+      this.fx.cam.addTrauma(0.35);
       this.events.onState();
     }
     this.tomb.visible = false;
+    this.fx.cam.setFocus(1.0);
+    audio.setIntensity(1);
     st.monster = null;
   }
 

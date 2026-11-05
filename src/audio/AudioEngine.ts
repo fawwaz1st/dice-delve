@@ -4,6 +4,7 @@ export class AudioEngine {
   private master: GainNode | null = null;
   private muted = false;
   private musicOn = false;
+  private intensity = 0; // 0 tenang, 1 normal, 2 tegang
   private musicGain: GainNode | null = null;
   private beat = 0;
 
@@ -24,6 +25,12 @@ export class AudioEngine {
     this.master.connect(comp);
     comp.connect(this.ctx.destination);
     this.startMusic();
+    // Perbarui skala saat intensitas berubah (timer ringan).
+  }
+
+  /** 0 = tenang, 1 = normal, 2 = tegang (combat). */
+  setIntensity(level: 0 | 1 | 2): void {
+    this.intensity = level;
   }
 
   setMuted(muted: boolean): void {
@@ -124,13 +131,15 @@ export class AudioEngine {
     this.musicGain = this.ctx.createGain();
     this.musicGain.gain.value = 0.06;
     this.musicGain.connect(this.master);
-    const scale = [220, 262, 294, 330, 392, 440];
+    // Skala berkisar per intensitas (makin tegang makin atas/nada).
+    const scaleFor = (i: number): number[] => (i === 0 ? [220, 262, 294, 330] : i === 1 ? [262, 294, 330, 392, 440] : [330, 392, 440, 523, 659, 784]);
     const step = () => {
       if (!this.ctx || !this.musicGain || !this.musicOn) return;
       const t0 = this.ctx.currentTime;
       const osc = this.ctx.createOscillator();
       const g = this.ctx.createGain();
       osc.type = 'sine';
+      const scale = scaleFor(this.intensity);
       const freq = scale[Math.floor(Math.random() * scale.length)] ?? 220;
       osc.frequency.setValueAtTime(freq, t0);
       g.gain.setValueAtTime(0, t0);
@@ -141,6 +150,21 @@ export class AudioEngine {
       osc.start(t0);
       osc.stop(t0 + 0.85);
       this.beat += 1;
+      // Lapis harmoni saat tegang: nada tinggi atas melodi.
+      if (this.intensity === 2) {
+        const osc3 = this.ctx.createOscillator();
+        const g3 = this.ctx.createGain();
+        osc3.type = 'sine';
+        const hiScale = scaleFor(2);
+        const hi = hiScale[Math.floor(Math.random() * hiScale.length)] ?? 659;
+        osc3.frequency.setValueAtTime(hi * 2, t0);
+        g3.gain.setValueAtTime(0.1, t0);
+        g3.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.5);
+        osc3.connect(g3);
+        g3.connect(this.musicGain);
+        osc3.start(t0);
+        osc3.stop(t0 + 0.55);
+      }
       if (this.beat % 4 === 0) {
         // Bass rendah tiap 4 ketuk.
         const osc2 = this.ctx.createOscillator();

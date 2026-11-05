@@ -8,9 +8,15 @@ import { Game } from './gameplay/Game.js';
 import { todaySeed } from './gameplay/Board.js';
 import './ui/styles.css';
 import { audio } from './audio/AudioEngine.js';
+import { Particles } from './fx/Particles.js';
+import { DamageNumbers } from './fx/DamageNumbers.js';
+import { CameraRig } from './fx/CameraRig.js';
+import { loadMeta, saveMeta, runBonuses, runRewards, buyUpgrade, upgradeLevel, canAfford, UPGRADES, type UpgradeId } from './meta/Meta.js';
+import { CARD_POOL, CARDS, type CardId } from './gameplay/Cards.js';
 
 async function boot(): Promise<void> {
   const platform = detectPlatform();
+  let meta = loadMeta();
   const canvas = document.createElement('canvas');
   document.getElementById('app')!.appendChild(canvas);
 
@@ -49,6 +55,7 @@ async function boot(): Promise<void> {
       <h2 class="endpanel__title" id="end-title"></h2>
       <p class="endpanel__text" id="end-text"></p>
       <button class="btn" id="end-btn" type="button"></button>
+      <button class="btn btn--secondary" id="end-hub-btn" type="button" style="margin-top:8px">Ke Hub</button>
     </div>
   `;
   document.body.appendChild(hud);
@@ -63,6 +70,39 @@ async function boot(): Promise<void> {
     <p class="titlescreen__how">Lempar dadu · Bergerak · Bertarung · Tahankan kartu</p>
   `;
   document.body.appendChild(titleScreen);
+
+  // Hub: upgrade permanen + statistik + mulai run.
+  const hubScreen = document.createElement('div');
+  hubScreen.className = 'hub';
+  hubScreen.hidden = true;
+  hubScreen.innerHTML = `
+    <div class="hub__inner">
+      <h1 class="hub__title">Hub</h1>
+      <div class="hub__shards">Shard: <strong id="hub-shards">0</strong></div>
+      <div class="hub__stats">
+        <div class="hub__stat"><div class="hub__stat-value" id="hub-best-floor">0</div><div class="hub__stat-label">Lantai Terbaik</div></div>
+        <div class="hub__stat"><div class="hub__stat-value" id="hub-runs">0</div><div class="hub__stat-label">Run</div></div>
+        <div class="hub__stat"><div class="hub__stat-value" id="hub-kills">0</div><div class="hub__stat-label">Bunuh</div></div>
+        <div class="hub__stat"><div class="hub__stat-value" id="hub-gold">0</div><div class="hub__stat-label">Emas Total</div></div>
+      </div>
+      <div class="hub__upgrades" id="hub-upgrades"></div>
+      <button class="btn" id="hub-run-btn" type="button">Run Baru</button>
+    </div>
+  `;
+  document.body.appendChild(hubScreen);
+
+  // Draft kartu awal.
+  const draftScreen = document.createElement('div');
+  draftScreen.className = 'draft';
+  draftScreen.hidden = true;
+  draftScreen.innerHTML = `
+    <h2 class="draft__title">Pilih Kartu Awal</h2>
+    <p class="draft__sub">Satu kartu untuk run ini</p>
+    <div class="draft__row" id="draft-row"></div>
+  `;
+  document.body.appendChild(draftScreen);
+  const draftRow = document.getElementById('draft-row')!;
+  const hubUpgrades = document.getElementById('hub-upgrades')!;
 
   const endPanel = document.getElementById('end-panel')!;
   const endTitle = document.getElementById('end-title')!;
@@ -117,7 +157,7 @@ async function boot(): Promise<void> {
           endBtn.textContent = 'Coba Lagi';
           endBtn.onclick = () => {
             endPanel.hidden = true;
-            const nb = game.restartBoard();
+            const nb = game.restartBoard(runBonuses(meta));
             rig.root.add(nb.group);
             updateUI();
           };
@@ -133,13 +173,129 @@ async function boot(): Promise<void> {
       el.rollBtn.disabled = game.busy || s.status === 'won' || s.status === 'dead';
   };
 
+  // ---- Hub & aliran ----
+
+  function renderHub(): void {
+    (document.getElementById('hub-shards') as HTMLElement).textContent = String(meta.shards);
+    (document.getElementById('hub-best-floor') as HTMLElement).textContent = String(meta.bestFloor);
+    (document.getElementById('hub-runs') as HTMLElement).textContent = String(meta.totalRuns);
+    (document.getElementById('hub-kills') as HTMLElement).textContent = String(meta.totalKills);
+    (document.getElementById('hub-gold') as HTMLElement).textContent = String(meta.totalGold);
+    hubUpgrades.replaceChildren();
+    (Object.keys(UPGRADES) as UpgradeId[]).forEach((id) => {
+      const def = UPGRADES[id];
+      const lvl = upgradeLevel(meta, id);
+      const row = document.createElement('div');
+      row.className = 'upgrade';
+      const maxed = lvl >= def.maxLevel;
+      const affordable = canAfford(meta, id);
+      const cost = maxed ? 0 : def.cost(lvl);
+      row.innerHTML = `
+        <div class="upgrade__info">
+          <p class="upgrade__name">${def.name}</p>
+          <p class="upgrade__desc">${def.desc}</p>
+          <p class="upgrade__level">Level ${lvl}/${def.maxLevel}</p>
+        </div>
+        <button class="upgrade__buy" type="button" ${maxed || !affordable ? 'disabled' : ''}>${maxed ? 'Maks' : cost + ' shard'}</button>
+      `;
+      const buyBtn = row.querySelector('.upgrade__buy') as HTMLButtonElement;
+      buyBtn.addEventListener('click', () => {
+        if (buyUpgrade(meta, id)) {
+          toast('Membeli ' + def.name + ' Lv ' + (lvl + 1) + '.', 'success');
+          audio.unlock();
+          renderHub();
+        }
+      });
+      hubUpgrades.appendChild(row);
+    });
+  }
+
+  function enterHub(): void {
+    renderHub();
+    hubScreen.hidden = false;
+  }
+
+  function startRun(): void {
+    hubScreen.hidden = true;
+    showDraft(runBonuses(meta));
+  }
+
+  function showDraft(bonuses: { maxHp: number; damage: number; diceBonus: number; goldMultiplier: number }): void {
+    draftRow.replaceChildren();
+    const pool = [...CARD_POOL];
+    const picks: CardId[] = [];
+    while (picks.length < 3 && pool.length > 0) {
+      const i = Math.floor(Math.random() * pool.length);
+      picks.push(pool.splice(i, 1)[0]!);
+    }
+    picks.forEach((id) => {
+      const def = CARDS[id];
+      const card = document.createElement('button');
+      card.className = 'draft-card';
+      card.type = 'button';
+      card.innerHTML = `
+        <div class="draft-card__icon">${def.icon}</div>
+        <p class="draft-card__name">${def.name}</p>
+        <p class="draft-card__rarity draft-card__rarity--${def.rarity}">${def.rarity}</p>
+        <p class="draft-card__desc">${def.desc}</p>
+      `;
+      card.addEventListener('click', () => {
+        draftScreen.hidden = true;
+        game.start(bonuses);
+        game.run.state.cards.push(id);
+        meta.totalRuns += 1;
+        saveMeta(meta);
+        updateUI();
+        toast('Memilih ' + def.name + '.', 'success');
+      });
+      draftRow.appendChild(card);
+    });
+    draftScreen.hidden = false;
+  }
+
+  function endRunToHub(): void {
+    const s = game.run.state;
+    const won = s.status === 'won';
+    const reward = runRewards(s.floor, s.gold, s.kills, won);
+    meta.shards += reward;
+    meta.bestFloor = Math.max(meta.bestFloor, s.floor);
+    meta.bestGold = Math.max(meta.bestGold, s.gold);
+    meta.totalKills += s.kills;
+    meta.totalGold += s.gold;
+    if (won) meta.wins += 1;
+    saveMeta(meta);
+    endPanel.hidden = true;
+    enterHub();
+    toast('Run selesai: +' + reward + ' shard.', 'success');
+  }
+
+  const endHubBtn = document.getElementById('end-hub-btn') as HTMLButtonElement;
+  endHubBtn.addEventListener('click', () => {
+    endRunToHub();
+  });
+
+  const hubRunBtn = document.getElementById('hub-run-btn') as HTMLButtonElement;
+  hubRunBtn.addEventListener('click', () => {
+    audio.unlock();
+    startRun();
+  });
+
+  // FX: partikel, angka melayang, kamera.
+  const particles = new Particles();
+  rig.root.add(particles.points);
+  const dmgLayer = document.createElement('div');
+  dmgLayer.className = 'dmg-layer';
+  document.body.appendChild(dmgLayer);
+  const dmg = new DamageNumbers(dmgLayer, rig.camera);
+  const cam = new CameraRig(rig.camera);
+
   const game = new Game(dice, board, {
     onState: updateUI,
     onToast: toast,
     onCombat: (text) => {
       log(text);
     },
-  });
+  }, { particles, dmg, cam });
 
   rig.root.add(game.piece.group);
   rig.root.add(game.tomb);
@@ -149,8 +305,7 @@ async function boot(): Promise<void> {
   startBtn.addEventListener('click', () => {
     audio.unlock();
     titleScreen.hidden = true;
-    game.start();
-    updateUI();
+    enterHub();
   });
 
   el.rollBtn.addEventListener('click', () => {
@@ -180,12 +335,19 @@ async function boot(): Promise<void> {
   resize();
   window.addEventListener('resize', resize);
 
+  let lastFrame = performance.now();
   const loop = new Loop(
     () => {
       dice.update();
       rig.update();
     },
     () => {
+      const now = performance.now();
+      const dt = Math.min(0.05, (now - lastFrame) / 1000);
+      lastFrame = now;
+      particles.update(dt);
+      dmg.update(dt);
+      cam.update(dt);
       renderer.render(rig.scene, rig.camera);
     },
   );

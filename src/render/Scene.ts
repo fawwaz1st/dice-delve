@@ -1,7 +1,7 @@
 import {
   Scene, PerspectiveCamera, Color, Fog,
   HemisphereLight, DirectionalLight, AmbientLight,
-  Mesh, BoxGeometry, Group, Vector3,
+  Mesh, BoxGeometry, ConeGeometry, IcosahedronGeometry, Group,
 } from 'three/webgpu';
 import { PALETTE, toonMaterial } from './Materials.js';
 
@@ -12,20 +12,31 @@ export interface SceneRig {
   update(): void;
 }
 
+/** RNG deterministik untuk penempatan dekorasi. */
+function rng(seed: number): () => number {
+  let s = seed >>> 0 || 1;
+  return () => {
+    s ^= s << 13; s >>>= 0;
+    s ^= s >>> 17;
+    s ^= s << 5; s >>>= 0;
+    return s / 0xffffffff;
+  };
+}
+
 export function createScene(): SceneRig {
   const scene = new Scene();
   scene.background = new Color(PALETTE.bg);
-  scene.fog = new Fog(new Color(PALETTE.bg), 18, 46);
+  scene.fog = new Fog(new Color(PALETTE.bg), 16, 44);
 
-  const camera = new PerspectiveCamera(42, 1, 0.1, 120);
+  const camera = new PerspectiveCamera(42, 1, 0.1, 140);
   camera.position.set(0, 9.5, 13.5);
-  camera.lookAt(0, 0, -1);
+  camera.lookAt(0, 0.6, -1);
 
-  // Cahaya: hemisphere lembut + directional dengan shadow (1 lampu saja).
-  const hemi = new HemisphereLight(new Color('#fff1d6'), new Color('#241a12'), 0.85);
+  // Pencahayaan: key hangat berkontras + rim dingin + fill lembut.
+  const hemi = new HemisphereLight(new Color('#ffe8c4'), new Color('#1e140c'), 0.7);
   scene.add(hemi);
 
-  const key = new DirectionalLight(new Color('#ffd9a0'), 2.8);
+  const key = new DirectionalLight(new Color('#ffd9a0'), 3.0);
   key.position.set(6, 12, 7);
   key.castShadow = true;
   key.shadow.mapSize.set(1024, 1024);
@@ -39,48 +50,30 @@ export function createScene(): SceneRig {
   key.shadow.normalBias = 0.02;
   scene.add(key);
 
-  // Rim light dingin dari belakang untuk memisahkan silhouette.
-  const rim = new DirectionalLight(new Color('#6f8cff'), 0.7);
+  // Rim dingin dari belakang untuk memisahkan silhouette.
+  const rim = new DirectionalLight(new Color('#7d9bff'), 0.9);
   rim.position.set(-6, 6, -9);
   scene.add(rim);
 
-  scene.add(new AmbientLight(new Color('#4a3a2a'), 0.25));
+  // Fill lembut dari depan bawah.
+  const fill = new DirectionalLight(new Color('#ffcc99'), 0.35);
+  fill.position.set(-4, 3, 9);
+  scene.add(fill);
+
+  scene.add(new AmbientLight(new Color('#483826'), 0.3));
 
   const root = new Group();
   scene.add(root);
 
-  // Meja kayu (tanah di mana semua berdiri).
+  // Meja kayu (bidang tanah).
   const tableMat = toonMaterial(PALETTE.table);
-  const table = new Mesh(new BoxGeometry(34, 1.2, 34), tableMat);
+  const table = new Mesh(new BoxGeometry(36, 1.2, 36), tableMat);
   table.position.y = -0.6;
   table.receiveShadow = true;
   root.add(table);
 
-  // Papan 10x10: kotak-kotak tiles.
-  const tileGeo = new BoxGeometry(1.9, 0.24, 1.9);
-  const tileMatA = toonMaterial(PALETTE.tile);
-  const tileMatB = toonMaterial(PALETTE.tileAlt);
-  const board = new Group();
-  const half = 5;
-  for (let x = 0; x < 10; x += 1) {
-    for (let z = 0; z < 10; z += 1) {
-      const tile = new Mesh(tileGeo, (x + z) % 2 === 0 ? tileMatA : tileMatB);
-      tile.position.set((x - half + 0.5) * 2, 0.12, (z - half + 0.5) * 2);
-      tile.receiveShadow = true;
-      tile.castShadow = false;
-      board.add(tile);
-    }
-  }
-  root.add(board);
-
-  // Bingkai papan.
+  // Bingkai papan (4 rel).
   const frameMat = toonMaterial(PALETTE.tableEdge);
-  const frame = new Mesh(new BoxGeometry(21.4, 0.5, 21.4), frameMat);
-  frame.position.y = 0.02;
-  frame.receiveShadow = true;
-  // Lubang tengah bingkai: pakai 4 balok.
-  frame.visible = false;
-  root.add(frame);
   const railGeo = new BoxGeometry(21.6, 0.6, 1.0);
   for (const [x, z] of [[0, -10.3], [0, 10.3], [-10.3, 0], [10.3, 0]] as const) {
     const rail = new Mesh(railGeo, frameMat);
@@ -90,15 +83,70 @@ export function createScene(): SceneRig {
     root.add(rail);
   }
 
-  // ... wajah dadu & pion akan ditambahkan modul gameplay.
-  const cameraTarget = new Vector3(0, 0.6, -1);
+  // Dekorasi lingkungan: pohon kerucut, kristal, batu (low-poly stylized).
+  addDecor(root);
 
+  // Kamera dikendalikan CameraRig. update() untuk ambient.
   function update(): void {
-    // Kamera orbit halus (placeholder; nanti digerakkan input).
-    const t = performance.now() * 0.0001;
-    camera.position.x = Math.sin(t) * 0.4;
-    camera.lookAt(cameraTarget);
+    // efek ambient ditangani sistem partikel di modul fx.
   }
 
   return { scene, camera, root, update };
 }
+
+function addDecor(root: Group): void {
+  const rand = rng(20261105);
+  const decor = new Group();
+  const trunkMat = toonMaterial('#5a3c24');
+  const leafMat = toonMaterial('#3f6632', { emissive: '#5a8a3a', emissiveIntensity: 0.15 });
+  const crystalMat = toonMaterial('#5a4a8a', { emissive: '#8f6bff', emissiveIntensity: 0.65 });
+  const rockMat = toonMaterial('#4a4440');
+  const trunkGeo = new BoxGeometry(0.35, 0.9, 0.35);
+  const leafGeo = new ConeGeometry(0.9, 2.2, 8);
+  const crystalGeo = new IcosahedronGeometry(0.5, 0);
+  const rockGeo = new IcosahedronGeometry(0.55, 0);
+
+  // Sebar di luar papan (radius > 11), hindari tengah.
+  for (let i = 0; i < 42; i += 1) {
+    const ang = rand() * Math.PI * 2;
+    const rad = 11.5 + rand() * 6;
+    const x = Math.cos(ang) * rad;
+    const z = Math.sin(ang) * rad;
+    const kind = rand();
+    let obj: Mesh;
+    if (kind < 0.42) {
+      // Pohon: batang + kerucut daun.
+      const tree = new Group();
+      const trunk = new Mesh(trunkGeo, trunkMat);
+      trunk.position.y = 0.45;
+      trunk.castShadow = true;
+      tree.add(trunk);
+      const leaf = new Mesh(leafGeo, leafMat);
+      leaf.position.y = 1.6;
+      leaf.castShadow = true;
+      tree.add(leaf);
+      const s = 0.8 + rand() * 0.8;
+      tree.scale.setScalar(s);
+      tree.position.set(x, 0, z);
+      tree.rotation.y = rand() * Math.PI;
+      decor.add(tree);
+      continue;
+    } else if (kind < 0.7) {
+      // Kristal memendar.
+      obj = new Mesh(crystalGeo, crystalMat);
+      obj.scale.setScalar(0.7 + rand() * 0.9);
+      obj.castShadow = true;
+    } else {
+      // Batu.
+      obj = new Mesh(rockGeo, rockMat);
+      obj.scale.setScalar(0.6 + rand() * 0.8);
+      obj.castShadow = true;
+    }
+    obj.position.set(x, 0.3, z);
+    obj.rotation.y = rand() * Math.PI;
+    decor.add(obj);
+  }
+
+  root.add(decor);
+}
+

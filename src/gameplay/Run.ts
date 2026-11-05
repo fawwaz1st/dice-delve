@@ -1,12 +1,16 @@
 import { generateTiles, todaySeed, type TileType } from './Board.js';
 import { CARDS, rollCard, type CardId } from './Cards.js';
 
+export type Monster_behavior = 'aggressive' | 'guardian' | 'sly';
+export interface MonsterBehavior { name: string; hpBonus: number; atkBonus: number; defBonus: number; dodge: number; }
+
 export interface MonsterState {
   name: string;
   hp: number;
   maxHp: number;
   atk: number;
   def: number;
+  behavior: Monster_behavior;
 }
 
 export interface RunState {
@@ -23,6 +27,10 @@ export interface RunState {
   status: 'idle' | 'rolling' | 'moving' | 'combat' | 'won' | 'dead';
   monster: MonsterState | null;
   log: string[];
+  /** Bonus permanen dari meta-upgrade. */
+  bonusDice: number;
+  bonusDamage: number;
+  goldMul: number;
 }
 
 const MONSTER_NAMES = ['Golem Lumut', 'Golem Batu', 'Raksasa Kabut', 'Siluman Bayangan', 'Setan Mara'];
@@ -50,6 +58,9 @@ export class Run {
       status: 'idle',
       monster: null,
       log: [],
+      bonusDice: 0,
+      bonusDamage: 0,
+      goldMul: 1,
     };
   }
 
@@ -57,10 +68,20 @@ export class Run {
     this.state = this.freshState(seed ?? todaySeed());
   }
 
+  /** Terapkan bonus permanen dari hub (maks HP, damage, dadu, emas). */
+  applyMetaBonuses(maxHp: number, damage: number, diceBonus: number, goldMultiplier: number): void {
+    const s = this.state;
+    s.maxHp = maxHp;
+    s.hp = maxHp;
+    s.bonusDamage = damage;
+    s.bonusDice = diceBonus;
+    s.goldMul = goldMultiplier;
+  }
+
   /* ---- Modifikasi dari kartu ---- */
 
   diceBonus(): number {
-    let bonus = 0;
+    let bonus = this.state.bonusDice ?? 0;
     for (const id of this.state.cards) {
       const c = CARDS[id];
       if (c && c.damageBonus) bonus += c.damageBonus;
@@ -141,14 +162,25 @@ export class Run {
     const floor = this.state.floor;
     const names = tier === 'boss' ? BOSS_NAMES : MONSTER_NAMES;
     const name = names[Math.floor(Math.random() * names.length)]!;
+    // Kepribadian: agresif (ATK tinggi), penjaga (DEF/HP tinggi), licik (menghindar).
+    const behavior: Monster_behavior = tier === 'boss'
+      ? (['aggressive', 'guardian', 'sly'] as Monster_behavior[])[Math.floor(Math.random() * 3)]!
+      : (['aggressive', 'guardian', 'sly'] as Monster_behavior[])[Math.floor(Math.random() * 3)]!;
+    const b: MonsterBehavior = behavior === 'aggressive'
+      ? { name: 'Agresif', hpBonus: -3, atkBonus: 3, defBonus: 0, dodge: 0 }
+      : behavior === 'guardian'
+      ? { name: 'Penjaga', hpBonus: 5, atkBonus: -1, defBonus: 2, dodge: 0 }
+      : { name: 'Licik', hpBonus: 0, atkBonus: 1, defBonus: 0, dodge: 0.2 };
     const base = tier === 'boss' ? 22 : tier === 'elite' ? 13 : 8;
-    const hp = base + floor * 4;
+    const hp = Math.max(4, base + floor * 4 + b.hpBonus);
+    const atkBase = Math.floor(4 + floor * 1 + (tier === 'elite' ? 2 : tier === 'boss' ? 4 : 0));
     return {
       name,
       hp,
       maxHp: hp,
-      atk: Math.max(2, Math.floor(4 + floor * 1 + (tier === 'elite' ? 2 : tier === 'boss' ? 4 : 0))),
-      def: tier === 'boss' ? 4 : tier === 'elite' ? 2 : 0,
+      atk: Math.max(1, atkBase + b.atkBonus),
+      def: Math.max(0, (tier === 'boss' ? 4 : tier === 'elite' ? 2 : 0) + b.defBonus),
+      behavior,
     };
   }
 
@@ -157,8 +189,10 @@ export class Run {
     const m = this.state.monster;
     if (!m) return { playerWins: false, playerDamage: 0, monsterDamage: 0, them: 'tidak ada' };
     const { value } = this.applyCardRoll(roll);
-    const bonus = this.diceBonus();
-    const dealt = value + bonus >= m.def ? value + bonus : 0;
+    const bonus = this.diceBonus() + (this.state.bonusDamage ?? 0);
+    // Licik: peluang menghindar dari serangan.
+    const dodged = m.behavior === 'sly' && Math.random() < 0.2;
+    const dealt = dodged ? 0 : (value + bonus >= m.def ? value + bonus : 0);
     m.hp = Math.max(0, m.hp - dealt);
 
     let taken = 0;
@@ -166,7 +200,7 @@ export class Run {
       if (Math.random() < this.dodgeChance()) {
         taken = 0;
       } else {
-        taken = Math.max(0, m.atk);
+        taken = Math.max(0, m.atk - this.cardDamageReduction());
       }
       this.state.hp = Math.max(0, this.state.hp - taken);
     }
@@ -184,8 +218,38 @@ export class Run {
     return { playerWins: false, playerDamage: dealt, monsterDamage: taken, them: 'bertahan' };
   }
 
+  cardGoldMul(): number {
+    let mul = 1;
+    for (const id of this.state.cards) {
+      const c = CARDS[id];
+      if (c && c.goldMul) mul *= c.goldMul;
+    }
+    return mul;
+  }
+
+  cardDamageReduction(): number {
+    let r = 0;
+    for (const id of this.state.cards) {
+      const c = CARDS[id];
+      if (c && c.damageReduction) r += c.damageReduction;
+    }
+    return r;
+  }
+
+  cardHealOnKill(): number {
+    let h = 0;
+    for (const id of this.state.cards) {
+      const c = CARDS[id];
+      if (c && c.healOnKill) h += c.healOnKill;
+    }
+    return h;
+  }
+
   onMonsterDefeated(tier: 'monster' | 'elite' | 'boss'): void {
-    const gold = tier === 'boss' ? 60 + this.state.floor * 10 : tier === 'elite' ? 30 : 15;
+    const gold = Math.round((tier === 'boss' ? 60 + this.state.floor * 10 : tier === 'elite' ? 30 : 15) * (this.state.goldMul ?? 1) * this.cardGoldMul());
+    const heal = this.cardHealOnKill();
+    if (heal > 0) this.heal(heal);
+    if (heal > 0) this.state.log.push('Pusaka memulihkan ' + heal + ' HP.');
     this.state.gold += gold;
     this.state.monster = null;
     this.state.log.push('Mengalahkan ' + (tier === 'boss' ? 'bos' : 'monster') + ': +' + gold + ' emas.');
@@ -194,7 +258,7 @@ export class Run {
   /* ---- Petak non-combat ---- */
 
   resolveTreasure(rng: () => number): { gold: number; card?: CardId } {
-    const gold = 10 + Math.floor(rng() * 20);
+    const gold = Math.round((10 + Math.floor(rng() * 20)) * (this.state.goldMul ?? 1) * this.cardGoldMul());
     this.state.gold += gold;
     const result: { gold: number; card?: CardId } = { gold };
     if (rng() < 0.5) {

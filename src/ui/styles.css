@@ -324,3 +324,160 @@ html, body {
   color: var(--ink-dim);
 }
 .titlescreen .btn { min-height: 56px; padding: 0 36px; font-size: 1.05rem; }
+
+/* Angka melayang (damage) */
+.dmg-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 9;
+  pointer-events: none;
+  overflow: hidden;
+}
+.dmg {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 1.35rem;
+  white-space: nowrap;
+  text-shadow: 0 2px 0 rgba(0,0,0,0.7), 0 0 12px rgba(0,0,0,0.4);
+  animation: dmg-pop 0.18s ease;
+}
+.dmg--player { color: var(--gold); }
+.dmg--hurt { color: var(--blood); }
+.dmg--heal { color: var(--venom); }
+.dmg--gold { color: var(--gold); }
+@keyframes dmg-pop {
+  from { transform: translate(-50%, -50%) scale(1.4); }
+  to { transform: translate(-50%, -50%) scale(1); }
+}
+
+/* Hub */
+.hub {
+  position: fixed;
+  inset: 0;
+  z-index: 19;
+  overflow-y: auto;
+  padding: 32px 16px;
+  background:
+    radial-gradient(ellipse at 50% 30%, rgba(60, 44, 28, 0.0), rgba(20, 17, 15, 0.85) 70%),
+    linear-gradient(180deg, rgba(20, 17, 15, 0.35), rgba(20, 17, 15, 0.94));
+}
+.hub[hidden] { display: none; }
+.hub__inner {
+  max-width: 560px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s4);
+}
+.hub__title {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: clamp(1.6rem, 5vw, 2.2rem);
+  margin: 0;
+  color: var(--ink);
+  text-align: center;
+}
+.hub__shards {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-family: var(--font-mono);
+  font-size: 1.1rem;
+  color: var(--arcane);
+}
+.hub__stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+.hub__stat {
+  padding: 10px;
+  border-radius: 8px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  text-align: center;
+}
+.hub__stat-value { font-family: var(--font-mono); font-size: 1.2rem; font-weight: 700; color: var(--ink); }
+.hub__stat-label { font-family: var(--font-mono); font-size: 0.58rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-dim); }
+.hub__upgrades {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.upgrade {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border-radius: 10px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+}
+.upgrade__info { flex: 1; min-width: 0; }
+.upgrade__name { font-weight: 700; color: var(--ink); font-size: 0.95rem; margin: 0; }
+.upgrade__desc { font-size: 0.8rem; color: var(--ink-dim); margin: 2px 0 0; }
+.upgrade__level { font-family: var(--font-mono); color: var(--gold); font-size: 0.8rem; margin: 2px 0 0; }
+.upgrade__buy {
+  min-height: 44px;
+  padding: 0 16px;
+  border: none;
+  border-radius: 8px;
+  background: var(--arcane);
+  color: #12091f;
+  font-weight: 700;
+  font-size: 0.85rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.upgrade__buy:disabled { filter: grayscale(0.7) brightness(0.75); cursor: not-allowed; }
+.hub .btn { width: 100%; }
+.btn--secondary {
+  background: var(--panel-2);
+  color: var(--ink);
+  box-shadow: 0 4px 0 #17110c, 0 8px 20px rgba(0,0,0,0.4);
+}
+
+/* Draft */
+.draft {
+  position: fixed;
+  inset: 0;
+  z-index: 18;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: var(--s4);
+  padding: 24px;
+  background: radial-gradient(ellipse at center, rgba(20, 17, 15, 0.3), rgba(20, 17, 15, 0.85));
+  text-align: center;
+}
+.draft[hidden] { display: none; }
+.draft__title { font-family: var(--font-display); font-weight: 800; font-size: clamp(1.4rem, 4vw, 2rem); margin: 0; color: var(--ink); }
+.draft__sub { margin: 0; color: var(--ink-dim); font-family: var(--font-mono); font-size: 0.72rem; letter-spacing: 0.12em; text-transform: uppercase; }
+.draft__row { display: flex; gap: 14px; flex-wrap: wrap; justify-content: center; }
+.draft-card {
+  width: 150px;
+  min-height: 190px;
+  padding: 16px 12px;
+  border-radius: 12px;
+  background: var(--panel);
+  border: 2px solid var(--line);
+  color: var(--ink);
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  text-align: center;
+  transition: transform 0.15s ease, border-color 0.15s ease;
+}
+.draft-card:hover, .draft-card:focus-visible { transform: translateY(-6px) scale(1.03); border-color: var(--gold); outline: none; }
+.draft-card__name { font-family: var(--font-display); font-weight: 800; font-size: 1.05rem; margin: 0; }
+.draft-card__rarity { font-family: var(--font-mono); font-size: 0.6rem; letter-spacing: 0.14em; text-transform: uppercase; }
+.draft-card__rarity--common { color: var(--ink-dim); }
+.draft-card__rarity--uncommon { color: var(--venom); }
+.draft-card__rarity--rare { color: var(--arcane); }
+.draft-card__desc { font-size: 0.78rem; color: var(--ink-dim); line-height: 1.4; margin: 0; }
+.draft-card__icon { font-size: 2rem; line-height: 1; }

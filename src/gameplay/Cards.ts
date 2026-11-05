@@ -1,4 +1,4 @@
-export type CardId = 'ember' | 'stone' | 'feather' | 'clover' | 'eye' | 'spark';
+export type CardId = 'ember' | 'stone' | 'feather' | 'clover' | 'eye' | 'spark' | 'surge' | 'magnet' | 'bulwark' | 'grave';
 
 export interface CardDef {
   id: CardId;
@@ -18,6 +18,12 @@ export interface CardDef {
   doubleChance?: number;
   /** Peluang menghindar. */
   dodge?: number;
+  /** Pengali emas (digabung dengan meta). */
+  goldMul?: number;
+  /** Kurangi damage masuk. */
+  damageReduction?: number;
+  /** HP pulih saat membunuh monster. */
+  healOnKill?: number;
 }
 
 export const CARDS: Record<CardId, CardDef> = {
@@ -45,9 +51,25 @@ export const CARDS: Record<CardId, CardDef> = {
     id: 'spark', name: 'Pijar', rarity: 'rare', icon: 'spark',
     desc: 'Dadu minimum 4.', modifyRoll: (r) => Math.max(r, 4),
   },
+  surge: {
+    id: 'surge', name: 'Gelombang', rarity: 'rare', icon: 'wave',
+    desc: '+2 damage serangan.', damageBonus: 2,
+  },
+  magnet: {
+    id: 'magnet', name: 'Magnet Emas', rarity: 'uncommon', icon: 'magnet',
+    desc: '+25% emas dari semua sumber.', goldMul: 1.25,
+  },
+  bulwark: {
+    id: 'bulwark', name: 'Benteng', rarity: 'uncommon', icon: 'wall',
+    desc: 'Kurangi 1 damage yang diterima.', damageReduction: 1,
+  },
+  grave: {
+    id: 'grave', name: 'Pusaka', rarity: 'rare', icon: 'tomb',
+    desc: 'Pulihkan 4 HP saat membunuh monster.', healOnKill: 4,
+  },
 };
 
-export const CARD_POOL: CardId[] = ['ember', 'stone', 'clover', 'feather', 'eye', 'spark'];
+export const CARD_POOL: CardId[] = ['ember', 'stone', 'clover', 'feather', 'eye', 'spark', 'surge', 'magnet', 'bulwark', 'grave'];
 
 export function rollCard(rng: () => number): CardId {
   // Bobot: common 60%, uncommon 28%, rare 12%.
