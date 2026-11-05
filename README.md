@@ -2,12 +2,12 @@
 
 ![Papan permainan](docs/board.png)
 
-![Gameplay](docs/gameplay.png)
+![Gameplay saat combat](docs/gameplay.png)
 
 Board-roguelike 3D stylized yang berjalan langsung di browser: lempar dadu,
 jelajahi papan prosedural, kumpulkan kartu, dan kalahkan bos. Papan 10x10
-diacak ulang setiap run, lawan AI, sistem kartu relic, dan bisa dipasang
-sebagai PWA (offline).
+diacak ulang setiap run, lawan AI berkepribadian, sistem kartu relic,
+hub meta-progresi, dan bisa dipasang sebagai PWA (offline).
 
 Demo: https://fawwaz1st.github.io/dice-delve/
 
@@ -15,34 +15,37 @@ Demo: https://fawwaz1st.github.io/dice-delve/
 
 ```mermaid
 flowchart TD
-    A[Run mulai] --> B[Lempar dadu]
-    B --> C[Pion melompat]
-    C --> D{Petak tujuan?}
-    D -->|monster / elite / bos| E[Combat turn-based]
-    D -->|harta| F[+Emas / kartu]
-    D -->|jebakan| G[Damage]
-    D -->|toko| H[Beli kartu]
-    D -->|istirahat| I[+HP]
-    E -->|menang| J[+Emas]
-    J --> K{Cek menang?}
-    E -->|kalah| L[Run selesai]
-    F --> K
-    G --> K
-    H --> K
-    I --> K
-    K -->|belum| B
-    K -->|papan habis| M[Menang lantai]
-    M --> N[Lantai berikutnya]
+    A[Judul] --> B[Hub]
+    B --> C[Draft kartu]
+    C --> D[Run mulai]
+    D --> E[Lempar dadu]
+    E --> F[Pion melompat]
+    F --> G{Petak tujuan?}
+    G -->|monster / elite / bos| H[Combat turn-based]
+    G -->|harta| I[+Emas / kartu]
+    G -->|jebakan| J[Damage]
+    G -->|toko| K[Beli kartu]
+    G -->|istirahat| L[+HP]
+    H -->|menang| M[+Emas]
+    H -->|kalah| N[Run selesai]
+    M --> O{Cek menang?}
+    I --> O
+    J --> O
+    K --> O
+    L --> O
+    O -->|belum| E
+    O -->|papan habis| P[Menang lantai]
+    P --> Q[Lantai berikutnya / Hub]
 ```
 
 Aturan singkat:
 
-1. Klik Lempar Dadu (atau tekan tombol di layar) saat giliranmu.
-2. Pion melompat sejumlah langkah sesuai nilai dadu.
-3. Petak monster memulai combat turn-based melawan AI.
-4. Kartu relic memperkuat dadu dan memberi efek di setiap giliran.
-5. Kalahkan bos untuk menembus papan dan masuk lantai berikutnya.
-6. HP mencapai nol mengakhiri run.
+1. Di hub, beli upgrade permanen dengan shard.
+2. Pilih 1 kartu awal dari draft (3 pilihan).
+3. Klik Lempar Dadu: pion melompat sesuai nilai dadu.
+4. Petak monster memulai combat turn-based melawan AI.
+5. Kalahkan bos untuk menembus papan dan naik lantai.
+6. HP mencapai nol mengakhiri run; hasil run menjadi shard.
 
 ## Fitur
 
@@ -51,20 +54,28 @@ Aturan singkat:
   dibagikan dan diulang.
 - Dadu 3D dengan animasi tween deterministik yang mendarat tepat pada
   nilai yang terpilih.
-- Combat turn-based melawan AI dengan HP, serangan, dan pertahanan; elite
-  dan bos yang lebih tangguh di lantai yang lebih dalam.
-- 6 kartu relic (Bara Api, Batu Karat, Semanggi, Bulu Angin, Mata Ketiga,
-  Pijar) dengan efek damage, regenerasi, dodge, dan dadu minimum.
-- Toko untuk membeli kartu dengan emas, petak harta untuk emas dan kartu,
-  jebakan yang memberi damage, istirahat yang memulihkan HP.
+- Combat turn-based melawan AI berkepribadian: Agresif (serangan tinggi),
+  Penjaga (HP/pertahanan tinggi), dan Licik (kadang menghindari).
+- 10 kartu relic: Bara Api, Batu Karat, Semanggi, Bulu Angin, Mata Ketiga,
+  Pijar, Gelombang (+2 damage), Magnet Emas (+25% emas), Benteng (-1 damage),
+  dan Pusaka (heal saat bunuh).
+- Draft kartu di awal run: pilih 1 dari 3.
+- Hub meta-progresi: shard permanen untuk 4 upgrade (Vitalitas +10 HP,
+  Dadu Tajam +1 damage, Keberuntungan +1 dadu, Serakah +15% emas), plus
+  statistik (lantai terbaik, total run, bunuh, emas).
 - Progresi lantai: papan baru tiap lantai, HP/emas/kartu dipertahankan.
+- Juice premium: ledakan partikel (hit, koin, heal, motes), angka damage
+  melayang, kamera follow + trauma shake + fokus combat, squash & stretch.
+- Dekorasi low-poly: pohon, kristal berpendar, batu; pencahayaan key + rim
+  + fill, fog, dan outline ink stylized pada pion/dadu/monster.
 - Audio disintesis penuh (Web Audio): SFX lempar, lompat, tabrakan, koin,
-  kartu, menang, kalah, plus musik pentatonik adaptif. Tombol bisu di HUD.
+  kartu, menang, kalah, dan musik adaptif (tenang/normal/tegang mengikuti
+  combat). Tombol bisu di HUD.
 - PWA: bisa dipasang ke layar utama dan dimainkan offline.
 - WebGPURenderer (Three.js) dengan fallback WebGL2 otomatis.
 - Loop fixed-timestep dengan interpolasi; deteksi tier perangkat dan
   pixel ratio clamp untuk 60fps di laptop menengah dan ponsel.
-- Responsif: HUD adaptif, toast, log combat, layar akhir (menang/kalah),
+- Responsif: HUD adaptif, toast, log combat, layar judul/hub/akhir,
   dan dukungan reduced-motion.
 
 ## Menjalankan
@@ -87,26 +98,32 @@ Deployment ke GitHub Pages ditangani GitHub Actions (push ke main).
     │   └── icons/
     ├── docs/                   # Tangkapan layar untuk README
     ├── src/
-    │   ├── main.ts             # Orkestrasi boot, HUD, loop
+    │   ├── main.ts             # Orkestrasi boot, layar, HUD, loop
     │   ├── core/
     │   │   ├── Renderer.ts     # WebGPURenderer + fallback WebGL2
     │   │   ├── Loop.ts         # Fixed timestep + interpolasi
     │   │   ├── Platform.ts     # Deteksi tier perangkat
     │   │   └── EventBus.ts
     │   ├── render/
-    │   │   ├── Scene.ts        # Meja, papan, cahaya, kamera
+    │   │   ├── Scene.ts        # Meja, cahaya, dekorasi, kamera
     │   │   └── Materials.ts    # Palet, material, outline ink
     │   ├── gameplay/
     │   │   ├── Board.ts        # Papan prosedural (DFS backtracking)
     │   │   ├── Dice.ts         # Dadu animasi tween
     │   │   ├── Piece.ts        # Pion dengan squash & stretch
-    │   │   ├── Cards.ts        # Katalog kartu relic
-    │   │   ├── Run.ts          # Mesin aturan (state, giliran, combat)
-    │   │   └── Game.ts         # Orkestrator turn-based
+    │   │   ├── Cards.ts        # Katalog 10 kartu relic
+    │   │   ├── Run.ts          # Mesin aturan (state, giliran, combat, AI)
+    │   │   └── Game.ts         # Orkestrator turn-based + FX
+    │   ├── meta/
+    │   │   └── Meta.ts         # Shard, upgrade, statistik, bonus run
+    │   ├── fx/
+    │   │   ├── Particles.ts    # Sistem partikel
+    │   │   ├── DamageNumbers.ts# Angka melayang
+    │   │   └── CameraRig.ts    # Follow, shake, fokus combat
     │   ├── audio/
-    │   │   └── AudioEngine.ts  # SFX + musik disintesis Web Audio
+    │   │   └── AudioEngine.ts  # SFX + musik adaptif disintesis
     │   ├── ui/
-    │   │   └── styles.css      # HUD, toast, panel akhir
+    │   │   └── styles.css      # HUD, layar, toast, panel
     │   └── utils/
     │       └── tween.ts        # Sistem tween (easing, fallback timer)
     ├── .github/workflows/
@@ -127,11 +144,10 @@ Deployment ke GitHub Pages ditangani GitHub Actions (push ke main).
 
 ## Roadmap
 
-- Hub meta-progresi dan upgrade permanen
-- Draft kartu di awal run
 - Duel async antar pemain (leaderboard musiman)
 - Tema papan dan kosmetik pion
 - Battle pass ringan
+- Mode harian ber-seed dengan tantangan khusus
 
 ## Kontribusi
 
