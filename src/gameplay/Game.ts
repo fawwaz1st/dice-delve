@@ -1,11 +1,11 @@
 import { Group, Mesh, IcosahedronGeometry, Vector3 } from 'three/webgpu';
-import { Board, todaySeed } from './Board.js';
+import { Board, todaySeed, themeForFloor } from './Board.js';
 import { Piece } from './Piece.js';
 import { Run } from './Run.js';
 import { DiceManager, type Dice } from './Dice.js';
 import { toonMaterial, addOutline } from '../render/Materials.js';
 import { tween, Ease } from '../utils/tween.js';
-import { CARDS } from './Cards.js';
+import { CARDS, type CardId } from './Cards.js';
 import { audio } from '../audio/AudioEngine.js';
 import { Particles } from '../fx/Particles.js';
 import { DamageNumbers } from '../fx/DamageNumbers.js';
@@ -76,7 +76,7 @@ export class Game {
 
   /** Bangun ulang papan 3D dari seed run saat ini. */
   rebuildBoard(): Board {
-    const newBoard = new Board(this.run.state.seed);
+    const newBoard = new Board(this.run.state.seed, themeForFloor(this.run.state.floor));
     if (this.board.group.parent) this.board.group.parent.remove(this.board.group);
     (this as unknown as { board: Board }).board = newBoard;
     return newBoard;
@@ -122,16 +122,24 @@ export class Game {
     const st = this.run.state;
     if (st.status === 'won' || st.status === 'dead') return;
     this.busy = true;
+    // Tangkap sebelum beginRoll menimpa status menjadi 'rolling'.
+    const wasCombat = st.status === 'combat';
     this.run.beginRoll();
     audio.roll();
     this.events.onState();
-    // Nilai ditentukan dadu; animasi tween menyelesaikan tepat pada muka itu.
-    const diceValue = await this.dice.roll(this.die);
-    this.lastRoll = diceValue;
-    const rolled = this.run.applyCardRoll(diceValue);
-    this.events.onCombat('Lempar dadu: ' + rolled.value + (rolled.doubled ? ' (ganda!)' : ''));
-    await this.movePiece(rolled.value);
-    await this.resolveTile();
+
+    if (wasCombat) {
+      // Dalam combat: satu ronde per klik (pemain yang menggerakkan).
+      await this.doCombatRound();
+    } else {
+      // Nilai ditentukan dadu; animasi tween menyelesaikan pada muka itu.
+      const diceValue = await this.dice.roll(this.die);
+      this.lastRoll = diceValue;
+      const rolled = this.run.applyCardRoll(diceValue);
+      this.events.onCombat('Lempar dadu: ' + rolled.value + (rolled.doubled ? ' (ganda!)' : ''));
+      await this.movePiece(rolled.value);
+      await this.resolveTile();
+    }
     this.busy = false;
     this.events.onState();
   }
@@ -163,8 +171,8 @@ export class Game {
       case 'monster':
       case 'elite':
       case 'boss':
-        await this.combat(tile.type as 'monster' | 'elite' | 'boss');
-        break;
+        this.enterCombat(tile.type as 'monster' | 'elite' | 'boss');
+        return;
       case 'treasure': {
         const res = this.run.resolveTreasure(Math.random);
         audio.coin();
@@ -219,7 +227,33 @@ export class Game {
     st.status = 'idle';
   }
 
-  private async combat(tier: 'monster' | 'elite' | 'boss'): Promise<void> {
+  /** Pakai skill aktif kartu (dengan FX). */
+  async useSkill(id: CardId): Promise<void> {
+    if (this.busy) return;
+    const res = this.run.useSkill(id);
+    if (!res.ok) {
+      this.toastAt(res.message, 'warning');
+      return;
+    }
+    this.toastAt(res.message, res.kind === 'damage' ? 'success' : 'info');
+    if (res.kind === 'damage' && this.tomb.visible) {
+      audio.hit();
+      this.flashMonster();
+      const mp = this.tomb.position.clone().setY(0.7);
+      this.fx.particles.burst(mp, { count: 30, color: '#ff6a2a', speed: 4, up: 2.5 });
+      this.fx.dmg.spawn(mp, res.amount, 'player');
+      this.events.onCombat(res.message + ' Sisa ' + (this.run.state.monster?.hp ?? 0) + '/' + (this.run.state.monster?.maxHp ?? 0) + '.');
+    }
+    this.busy = true;
+    await this.hitStop(250);
+    // Periksa akhir combat (menang dari skill, atau tetap combat).
+    await this.checkCombatEnd();
+    this.busy = false;
+    this.events.onState();
+  }
+
+  /** Memasuki combat: monster muncul, pemain yang menggerakkan tiap ronde. */
+  enterCombat(tier: 'monster' | 'elite' | 'boss'): void {
     const st = this.run.state;
     const m = this.run.makeMonster(tier);
     st.monster = m;
@@ -232,44 +266,76 @@ export class Game {
     this.fx.cam.follow(here.clone().lerp(new Vector3(here.x + 1.6, 0, here.z), 0.5));
     this.fx.particles.motes(new Vector3(here.x + 1.6, 0.8, here.z), 10);
     audio.setIntensity(2);
-    this.toastAt('Menghadapi ' + m.name + ' (HP ' + m.maxHp + ', ATK ' + m.atk + ', DEF ' + m.def + ').', 'warning');
-    while (m.hp > 0 && st.hp > 0) {
-      const combatValue = await this.dice.roll(this.die);
-      this.lastRoll = combatValue;
-      const res = this.run.combatRound(combatValue);
-      audio.hit();
-      this.flashMonster();
-      {
-        const mp = this.tomb.position.clone().setY(0.7);
-        if (res.playerDamage > 0) {
-          this.fx.particles.burst(mp, { count: 26, color: '#ff6a2a', speed: 3.5, up: 2 });
-          this.fx.dmg.spawn(mp, res.playerDamage, 'player');
-        }
-      }
-      this.events.onCombat(res.playerDamage > 0 ? m.name + ' menerima ' + res.playerDamage + ' damage. Sisa ' + m.hp + '/' + m.maxHp + '.' : m.name + ' menahan serangan (DEF ' + m.def + ').');
-      await this.hitStop(120);
-      if (m.hp <= 0) break;
-      if (res.monsterDamage > 0) {
-        audio.hurt();
-        this.fx.dmg.spawn(this.piece.group.position.clone().setY(1.2), res.monsterDamage, 'hurt');
-        this.fx.particles.burst(this.piece.group.position.clone().setY(0.7), { count: 14, color: '#ff3b5c', speed: 2 });
-        this.fx.cam.addTrauma(0.55);
-        this.events.onCombat(m.name + ' menyerang: kamu menerima ' + res.monsterDamage + ' damage.');
-        this.shakePiece();
-      }
-      await this.hitStop(100);
+    const pers = m.behavior === 'aggressive' ? 'Agresif' : m.behavior === 'guardian' ? 'Penjaga' : 'Licik';
+    this.toastAt('Menghadapi ' + m.name + ' [' + pers + '] (HP ' + m.maxHp + ', ATK ' + m.atk + ', DEF ' + m.def + ').', 'warning');
+  }
+
+  /** Keluar dari combat setelah ada yang menang. */
+  private exitCombat(): void {
+    this.tomb.visible = false;
+    this.fx.cam.setFocus(1.0);
+    audio.setIntensity(1);
+    this.run.state.monster = null;
+  }
+
+  /** Satu ronde combat yang digerakkan oleh klik Lempar. */
+  private async doCombatRound(): Promise<void> {
+    const st = this.run.state;
+    const m = st.monster;
+    if (!m || m.hp <= 0) return;
+    const combatValue = await this.dice.roll(this.die);
+    this.lastRoll = combatValue;
+    const res = this.run.combatRound(combatValue);
+    audio.hit();
+    this.flashMonster();
+    if (res.playerDamage > 0) {
+      const mp = this.tomb.position.clone().setY(0.7);
+      this.fx.particles.burst(mp, { count: 26, color: '#ff6a2a', speed: 3.5, up: 2 });
+      this.fx.dmg.spawn(mp, res.playerDamage, 'player');
+      this.events.onCombat(m.name + ' menerima ' + res.playerDamage + ' damage. Sisa ' + m.hp + '/' + m.maxHp + '.');
+    } else {
+      this.events.onCombat(m.name + ' menahan serangan (DEF ' + m.def + ').');
     }
-    if (m.hp <= 0 && st.hp > 0) {
+    await this.hitStop(120);
+    if (m.hp > 0 && res.monsterDamage > 0) {
+      audio.hurt();
+      this.fx.dmg.spawn(this.piece.group.position.clone().setY(1.2), res.monsterDamage, 'hurt');
+      this.fx.particles.burst(this.piece.group.position.clone().setY(0.7), { count: 14, color: '#ff3b5c', speed: 2 });
+      this.fx.cam.addTrauma(0.55);
+      this.events.onCombat(m.name + ' menyerang: kamu menerima ' + res.monsterDamage + ' damage.');
+      this.shakePiece();
+    }
+    await this.hitStop(100);
+    await this.checkCombatEnd();
+  }
+
+  /** Periksa akhir combat: menang -> keluar, kalah -> dead, else tetap combat. */
+  private async checkCombatEnd(): Promise<void> {
+    const st = this.run.state;
+    const m = st.monster;
+    if (m && m.hp <= 0 && st.hp > 0) {
+      const tier = (this.run.currentTile()?.type as 'monster' | 'elite' | 'boss') ?? 'monster';
       this.run.onMonsterDefeated(tier);
       const ep = this.tomb.position.clone().setY(0.6);
       this.fx.particles.burst(ep, { count: 40, color: '#8f6bff', speed: 4, up: 4, life: 1.2 });
       this.fx.cam.addTrauma(0.35);
-      this.events.onState();
+      this.exitCombat();
+      if (st.position >= st.tiles.length - 1) {
+        st.status = 'won';
+        audio.fanfare();
+        this.toastAt('Kamu menembus papan! Lanjut ke lantai ' + (st.floor + 1) + '.', 'success');
+      } else {
+        st.status = 'idle';
+      }
+      return;
     }
-    this.tomb.visible = false;
-    this.fx.cam.setFocus(1.0);
-    audio.setIntensity(1);
-    st.monster = null;
+    if (st.hp <= 0) {
+      st.status = 'dead';
+      audio.death();
+      this.exitCombat();
+      this.toastAt('Kamu tumbang di petak ' + (st.position + 1) + '. Run selesai.', 'error');
+    }
+    // else: masih combat, menunggu aksi pemain berikutnya.
   }
 
   private flashMonster(): void {

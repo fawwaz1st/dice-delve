@@ -24,12 +24,15 @@ export interface CardDef {
   damageReduction?: number;
   /** HP pulih saat membunuh monster. */
   healOnKill?: number;
+  /** Kemampuan aktif yang bisa dipakai pemain (dengan cooldown giliran). */
+  active?: { name: string; desc: string; cooldown: number; kind: 'damage' | 'heal' | 'skip' | 'fixroll'; amount: number };
 }
 
 export const CARDS: Record<CardId, CardDef> = {
   ember: {
     id: 'ember', name: 'Bara Api', rarity: 'common', icon: 'flame',
     desc: 'Dadu +1 tiap giliran.', damageBonus: 1,
+    active: { name: 'Ledakan', desc: '8 damage ke monster.', cooldown: 3, kind: 'damage', amount: 8 },
   },
   stone: {
     id: 'stone', name: 'Batu Karat', rarity: 'common', icon: 'shield',
@@ -38,6 +41,7 @@ export const CARDS: Record<CardId, CardDef> = {
   feather: {
     id: 'feather', name: 'Bulu Angin', rarity: 'uncommon', icon: 'wind',
     desc: '25% peluang melempar dadu dua kali.', doubleChance: 0.25,
+    active: { name: 'Sapuan', desc: '5 damage, lalu hindari serangan berikutnya.', cooldown: 3, kind: 'damage', amount: 5 },
   },
   clover: {
     id: 'clover', name: 'Semanggi', rarity: 'common', icon: 'clover',
@@ -46,10 +50,12 @@ export const CARDS: Record<CardId, CardDef> = {
   eye: {
     id: 'eye', name: 'Mata Ketiga', rarity: 'rare', icon: 'eye',
     desc: '15% peluang menghindar dari serangan.', dodge: 0.15,
+    active: { name: 'Tatapan', desc: 'Monster melewati serangan berikutnya.', cooldown: 4, kind: 'skip', amount: 1 },
   },
   spark: {
     id: 'spark', name: 'Pijar', rarity: 'rare', icon: 'spark',
     desc: 'Dadu minimum 4.', modifyRoll: (r) => Math.max(r, 4),
+    active: { name: 'Terjang', desc: 'Dadu berikutnya menjadi 6.', cooldown: 3, kind: 'fixroll', amount: 6 },
   },
   surge: {
     id: 'surge', name: 'Gelombang', rarity: 'rare', icon: 'wave',

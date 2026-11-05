@@ -12,9 +12,35 @@ export class CameraRig {
   private trauma = 0;
   private focusDistance = 1.0;
   private focusTarget = 1.0;
+  /** Orbit manual (azimuth) + zoom pemakai; 0 = dari selatan. */
+  private azimuth = 0;
+  private azimuthTarget = 0;
+  private userZoom = 1.0;
+  private userZoomTarget = 1.0;
 
-  constructor(camera: PerspectiveCamera) {
+  constructor(camera: PerspectiveCamera, canvas?: HTMLCanvasElement) {
     this.camera = camera;
+    if (canvas) this.bindInput(canvas);
+  }
+
+  /** Orbit (drag) dan zoom (roda/pinch) manual. */
+  private bindInput(canvas: HTMLCanvasElement): void {
+    let dragging = false;
+    let lastX = 0;
+    canvas.addEventListener('pointerdown', (e) => { dragging = true; lastX = e.clientX; });
+    window.addEventListener('pointerup', () => { dragging = false; });
+    window.addEventListener('pointermove', (e) => {
+      if (!dragging) return;
+      const dx = e.clientX - lastX;
+      lastX = e.clientX;
+      this.azimuthTarget += dx * 0.005;
+    });
+    canvas.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      this.userZoomTarget = Math.min(1.8, Math.max(0.6, this.userZoomTarget + Math.sign(e.deltaY) * 0.12));
+    }, { passive: false });
+    // double click: kembalikan orbit
+    canvas.addEventListener('dblclick', () => { this.azimuthTarget = 0; this.userZoomTarget = 1.0; });
   }
 
   /** Target kamera (posisi pion). */
@@ -36,9 +62,17 @@ export class CameraRig {
     this.currentLook.lerp(this.target, Math.min(1, dt * 3.5));
     this.focusDistance += (this.focusTarget - this.focusDistance) * Math.min(1, dt * 4);
 
-    const d = this.baseOffset.clone().multiplyScalar(this.focusDistance);
-    // Offset relatif terhadap target (agar selalu dari arah yang sama).
-    const desired = new Vector3(this.currentLook.x, d.y, this.currentLook.z + d.z);
+    // Azimuth + zoom pemakai (halus).
+    this.azimuth += (this.azimuthTarget - this.azimuth) * Math.min(1, dt * 6);
+    this.userZoom += (this.userZoomTarget - this.userZoom) * Math.min(1, dt * 6);
+    const dist = Math.hypot(this.baseOffset.x, this.baseOffset.z) * this.focusDistance * this.userZoom;
+    const baseY = this.baseOffset.y * this.focusDistance * (0.7 + 0.3 * this.userZoom);
+    const az = this.azimuth;
+    const desired = new Vector3(
+      this.currentLook.x + Math.sin(az) * dist,
+      this.currentLook.y + baseY,
+      this.currentLook.z + Math.cos(az) * dist,
+    );
     this.camera.position.lerp(desired, Math.min(1, dt * 5));
 
     // Guncangan: trauma decays, offset Perlin-like.

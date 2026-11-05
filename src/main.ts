@@ -3,7 +3,7 @@ import { Loop } from './core/Loop.js';
 import { detectPlatform } from './core/Platform.js';
 import { createScene } from './render/Scene.js';
 import { DiceManager } from './gameplay/Dice.js';
-import { Board } from './gameplay/Board.js';
+import { Board, themeForFloor } from './gameplay/Board.js';
 import { Game } from './gameplay/Game.js';
 import { todaySeed } from './gameplay/Board.js';
 import './ui/styles.css';
@@ -13,6 +13,7 @@ import { DamageNumbers } from './fx/DamageNumbers.js';
 import { CameraRig } from './fx/CameraRig.js';
 import { loadMeta, saveMeta, runBonuses, runRewards, buyUpgrade, upgradeLevel, canAfford, UPGRADES, type UpgradeId } from './meta/Meta.js';
 import { CARD_POOL, CARDS, type CardId } from './gameplay/Cards.js';
+import { icon } from './ui/icons.js';
 
 async function boot(): Promise<void> {
   const platform = detectPlatform();
@@ -24,7 +25,7 @@ async function boot(): Promise<void> {
   const rig = createScene();
 
   // Papan prosedural dari seed hari ini.
-  const board = new Board(todaySeed());
+  const board = new Board(todaySeed(), themeForFloor(1));
   rig.root.add(board.group);
 
   const dice = new DiceManager();
@@ -49,6 +50,7 @@ async function boot(): Promise<void> {
       <div class="readout readout--wide"><div class="readout__value" id="dice-value">1</div><div class="readout__label">Dadu</div></div>
       <button class="btn" id="roll-btn" type="button">Lempar Dadu</button>
     </div>
+    <div class="skillbar" id="skillbar"></div>
     <div class="log" id="combat-log"></div>
     <div class="toast-stack" id="toast-stack" aria-hidden="true"></div>
     <div class="endpanel" id="end-panel" hidden>
@@ -135,6 +137,33 @@ async function boot(): Promise<void> {
     while (el.log.children.length > 5) el.log.lastChild?.remove();
   }
 
+  // Tombol skill aktif untuk kartu yang dimiliki.
+  const skillbar = document.getElementById('skillbar')!;
+  function renderSkills(): void {
+    const s = game.run.state;
+    skillbar.replaceChildren();
+    s.cards.forEach((id) => {
+      const def = CARDS[id];
+      const active = def.active;
+      if (!active) return;
+      const cd = s.cooldowns[id] ?? 0;
+      const btn = document.createElement('button');
+      btn.className = 'skillbtn' + (cd > 0 ? ' skillbtn--cd' : '');
+      btn.type = 'button';
+      btn.dataset.card = id;
+      btn.title = active.name + ': ' + active.desc + ' (cooldown ' + active.cooldown + ')';
+      btn.innerHTML = '<span class="skillbtn__ico">' + icon(def.icon as never) + '</span><span class="skillbtn__name">' + active.name + '</span>' + (cd > 0 ? '<span class="skillbtn__cd">' + cd + '</span>' : '');
+      if (cd <= 0 && !game.busy) {
+        btn.addEventListener('click', () => {
+          game.useSkill(id).catch((err) => console.error(err));
+        });
+      } else {
+        btn.disabled = true;
+      }
+      skillbar.appendChild(btn);
+    });
+  }
+
   // Fungsi pemutakhir UI: dipanggil setiap giliran DAN setelah ganti papan.
   const updateUI = (): void => {
       const s = game.run.state;
@@ -171,6 +200,7 @@ async function boot(): Promise<void> {
       el.floor.textContent = String(s.floor);
       el.diceValue.textContent = String(game.lastRoll);
       el.rollBtn.disabled = game.busy || s.status === 'won' || s.status === 'dead';
+      renderSkills();
   };
 
   // ---- Hub & aliran ----
@@ -287,7 +317,7 @@ async function boot(): Promise<void> {
   dmgLayer.className = 'dmg-layer';
   document.body.appendChild(dmgLayer);
   const dmg = new DamageNumbers(dmgLayer, rig.camera);
-  const cam = new CameraRig(rig.camera);
+  const cam = new CameraRig(rig.camera, canvas);
 
   const game = new Game(dice, board, {
     onState: updateUI,
@@ -334,6 +364,40 @@ async function boot(): Promise<void> {
   }
   resize();
   window.addEventListener('resize', resize);
+
+  // Tooltip petak (raycast hover).
+  const tip = document.createElement('div');
+  tip.className = 'tip';
+  tip.hidden = true;
+  document.body.appendChild(tip);
+  {
+    const { Raycaster, Vector2 } = await import('three/webgpu');
+    const raycaster = new Raycaster();
+    const pointer = new Vector2();
+    let tipMove = 0;
+    canvas.addEventListener('pointermove', (e) => {
+      if (game.busy) { tip.hidden = true; return; }
+      pointer.x = (e.clientX / window.innerWidth) * 2 - 1;
+      pointer.y = -(e.clientY / window.innerHeight) * 2 + 1;
+      raycaster.setFromCamera(pointer, rig.camera);
+      const hit = raycaster.intersectObjects(game.board.tiles.map((t) => t.mesh))[0];
+      if (hit) {
+        const tileIndex = (hit.object as unknown as { userData: { tileIndex: number } }).userData.tileIndex;
+        const tile = game.run.state.tiles[tileIndex];
+        if (tile) {
+          tip.textContent = 'Petak ' + (tileIndex + 1) + ' · ' + tile.type;
+          tip.style.left = e.clientX + 'px';
+          tip.style.top = e.clientY + 'px';
+          tip.hidden = false;
+        }
+      } else {
+        tip.hidden = true;
+      }
+      tipMove = e.clientX;
+      void tipMove;
+    });
+    canvas.addEventListener('pointerleave', () => { tip.hidden = true; });
+  }
 
   let lastFrame = performance.now();
   const loop = new Loop(

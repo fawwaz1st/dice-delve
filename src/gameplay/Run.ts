@@ -14,6 +14,9 @@ export interface MonsterState {
 }
 
 export interface RunState {
+  cooldowns: Partial<Record<CardId, number>>;
+  skipNextMonster: boolean;
+  fixedRollNext: boolean;
   seed: number;
   tiles: Array<{ gx: number; gz: number; type: TileType }>;
   position: number;
@@ -45,6 +48,9 @@ export class Run {
 
   private freshState(seed: number): RunState {
     return {
+      cooldowns: {},
+      skipNextMonster: false,
+      fixedRollNext: false,
       seed,
       tiles: generateTiles(seed),
       position: 0,
@@ -123,11 +129,51 @@ export class Run {
     return { value, doubled };
   }
 
+  /* ---- Skill aktif ---- */
+
+  /** Kartu yang memilih skill aktif yang siap dipakai. */
+  readySkills(): CardId[] {
+    return this.state.cards.filter((id) => {
+      const c = CARDS[id];
+      return c && c.active && (this.state.cooldowns[id] ?? 0) <= 0;
+    });
+  }
+
+  canUseSkill(id: CardId): boolean {
+    const c = CARDS[id];
+    return !!c && !!c.active && (this.state.cooldowns[id] ?? 0) <= 0 && this.state.status !== 'dead';
+  }
+
+  /** Pakai skill: mengembalikan deskripsi efek untuk UI/log. */
+  useSkill(id: CardId): { ok: boolean; message: string; kind: 'damage' | 'skip' | 'heal' | 'fixroll' | 'none'; amount: number } {
+    const c = CARDS[id];
+    if (!c || !c.active || !this.canUseSkill(id)) return { ok: false, message: 'Skill belum siap.', kind: 'none', amount: 0 };
+    this.state.cooldowns[id] = c.active.cooldown;
+    const amt = c.active.amount;
+    if (c.active.kind === 'damage' && this.state.monster) {
+      this.state.monster.hp = Math.max(0, this.state.monster.hp - amt);
+      return { ok: true, message: c.active.name + ': ' + amt + ' damage ke ' + this.state.monster.name + '.', kind: 'damage', amount: amt };
+    }
+    if (c.active.kind === 'skip') {
+      this.state.skipNextMonster = true;
+      return { ok: true, message: c.active.name + ': monster melewati serangan.', kind: 'skip', amount: amt };
+    }
+    if (c.active.kind === 'fixroll') {
+      this.state.fixedRollNext = true;
+      return { ok: true, message: c.active.name + ': dadu berikutnya 6.', kind: 'fixroll', amount: amt };
+    }
+    return { ok: false, message: 'Skill tidak berlaku di sini.', kind: 'none', amount: 0 };
+  }
+
   /* ---- Giliran ---- */
 
   beginRoll(): void {
     this.state.status = 'rolling';
     this.state.turn += 1;
+    for (const id of Object.keys(this.state.cooldowns) as CardId[]) {
+      const v = this.state.cooldowns[id] ?? 0;
+      if (v > 0) this.state.cooldowns[id] = v - 1;
+    }
     const regen = this.regenAmount();
     if (regen > 0 && this.state.hp > 0) {
       this.state.hp = Math.min(this.state.maxHp, this.state.hp + regen);
@@ -188,7 +234,9 @@ export class Run {
   combatRound(roll: number): { playerWins: boolean; playerDamage: number; monsterDamage: number; them: string } {
     const m = this.state.monster;
     if (!m) return { playerWins: false, playerDamage: 0, monsterDamage: 0, them: 'tidak ada' };
-    const { value } = this.applyCardRoll(roll);
+    let rollValue = roll;
+    if (this.state.fixedRollNext) { rollValue = 6; this.state.fixedRollNext = false; }
+    const { value } = this.applyCardRoll(rollValue);
     const bonus = this.diceBonus() + (this.state.bonusDamage ?? 0);
     // Licik: peluang menghindar dari serangan.
     const dodged = m.behavior === 'sly' && Math.random() < 0.2;
@@ -197,7 +245,10 @@ export class Run {
 
     let taken = 0;
     if (m.hp > 0) {
-      if (Math.random() < this.dodgeChance()) {
+      if (this.state.skipNextMonster) {
+        this.state.skipNextMonster = false;
+        taken = 0;
+      } else if (Math.random() < this.dodgeChance()) {
         taken = 0;
       } else {
         taken = Math.max(0, m.atk - this.cardDamageReduction());

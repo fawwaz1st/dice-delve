@@ -481,3 +481,79 @@ html, body {
 .draft-card__rarity--rare { color: var(--arcane); }
 .draft-card__desc { font-size: 0.78rem; color: var(--ink-dim); line-height: 1.4; margin: 0; }
 .draft-card__icon { font-size: 2rem; line-height: 1; }
+/* === Dice Delve micro-polish (append-only) === */
+@keyframes dd-pop { 0% { transform: scale(0.85); opacity: 0; } 60% { transform: scale(1.04); opacity: 1; } 100% { transform: scale(1); } }
+@keyframes dd-dmg-rise { 0% { opacity: 0; transform: translateY(6px); } 15% { opacity: 1; } 100% { opacity: 0; transform: translateY(-26px); } }
+@keyframes dd-toast-in { from { opacity: 0; transform: translateY(10px) scale(0.96); } to { opacity: 1; transform: translateY(0) scale(1); } }
+@keyframes dd-shine { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+
+.btn, .upgrade__buy, .draft-card, .hub__stat, .readout, .toast { transition: transform 0.16s ease, border-color 0.16s ease, filter 0.16s ease, background 0.16s ease, box-shadow 0.16s ease; }
+.btn:hover:not(:disabled), .upgrade__buy:hover:not(:disabled) { filter: brightness(1.12); transform: translateY(-1px); }
+.btn:focus-visible, .upgrade__buy:focus-visible, .draft-card:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+.draft-card:hover, .draft-card:focus-visible { box-shadow: 0 14px 28px rgba(0,0,0,0.45), 0 0 0 1px rgba(255,176,0,0.25); }
+.draft-card:active { transform: translateY(-2px) scale(1); }
+.draft-card__icon, .upgrade__icon, .readout__value { animation: dd-pop 0.35s ease both; }
+.toast { animation: dd-toast-in 0.25s ease both; }
+.dmg { animation: dd-dmg-rise 1.1s ease-out both; pointer-events: none; }
+.upgrade:hover { border-color: var(--gold); transform: translateX(2px); }
+.titlescreen__title em { background: linear-gradient(90deg, var(--gold), var(--ember), var(--gold)); background-size: 200% 100%; -webkit-background-clip: text; background-clip: text; color: transparent; animation: dd-shine 6s linear infinite; }
+@media (hover: hover) { .btn:hover:not(:disabled) { transform: translateY(-1px); } }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; } }
+
+
+/* Skill bar (skill aktif kartu) */
+.skillbar {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: 92px;
+  z-index: 10;
+  display: flex;
+  gap: 8px;
+  pointer-events: auto;
+}
+.skillbtn {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 0 14px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: rgba(29, 23, 18, 0.92);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-weight: 700;
+  font-size: 0.82rem;
+  cursor: pointer;
+  box-shadow: 0 3px 0 rgba(0,0,0,0.4);
+  transition: transform 0.12s ease, border-color 0.12s ease;
+}
+.skillbtn:hover:not(:disabled) { transform: translateY(-2px); border-color: var(--gold); }
+.skillbtn__ico { display: inline-flex; width: 20px; height: 20px; color: var(--gold); }
+.skillbtn__ico svg { width: 100%; height: 100%; }
+.skillbtn--cd { filter: grayscale(0.6) brightness(0.7); cursor: not-allowed; }
+.skillbtn__cd {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--ink-dim);
+}
+.skillbtn:disabled { opacity: 0.6; }
+
+/* Tooltip petak */
+.tip {
+  position: fixed;
+  z-index: 15;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: rgba(20, 17, 15, 0.94);
+  border: 1px solid var(--line);
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  pointer-events: none;
+  white-space: nowrap;
+  transform: translate(-50%, -130%);
+}
+.tip[hidden] { display: none; }

@@ -84,17 +84,37 @@ export function createScene(): SceneRig {
   }
 
   // Dekorasi lingkungan: pohon kerucut, kristal, batu (low-poly stylized).
-  addDecor(root);
+  const animated: Array<{ mesh: Mesh; base: number; speed: number; kind: 'crystal' | 'leaf' }> = [];
+  const decorGroup = addDecor(root);
+  // Daftarkan kristal + daun untuk animasi idle.
+  decorGroup.traverse((child) => {
+    if (child instanceof Mesh) {
+      const gtype = (child.geometry as { type?: string }).type;
+      if (gtype === 'IcosahedronGeometry') {
+        animated.push({ mesh: child, base: child.position.y, speed: 1, kind: 'crystal' });
+      } else if (gtype === 'ConeGeometry') {
+        animated.push({ mesh: child, base: child.position.y, speed: 1, kind: 'leaf' });
+      }
+    }
+  });
 
-  // Kamera dikendalikan CameraRig. update() untuk ambient.
+  // Animasi idle: kristal melayang/berputar, daun berayun.
   function update(): void {
-    // efek ambient ditangani sistem partikel di modul fx.
+    const t = performance.now() * 0.001;
+    for (const item of animated) {
+      if (item.kind === 'crystal') {
+        item.mesh.position.y = item.base + Math.sin(t * 1.4 + item.base * 3) * 0.18;
+        item.mesh.rotation.y += 0.01;
+      } else {
+        item.mesh.rotation.z = Math.sin(t * 0.9 + item.base) * 0.06;
+      }
+    }
   }
 
   return { scene, camera, root, update };
 }
 
-function addDecor(root: Group): void {
+function addDecor(root: Group): Group {
   const rand = rng(20261105);
   const decor = new Group();
   const trunkMat = toonMaterial('#5a3c24');
@@ -148,5 +168,6 @@ function addDecor(root: Group): void {
   }
 
   root.add(decor);
+  return decor;
 }
 

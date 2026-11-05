@@ -11,6 +11,27 @@ export interface Tile {
   mesh: Mesh;
 }
 
+export type ThemeId = 'forest' | 'cave' | 'volcano';
+
+export interface Theme {
+  id: ThemeId;
+  name: string;
+  bg: string;
+  tint: string;
+  emissiveScale: number;
+}
+
+export const THEMES: Record<ThemeId, Theme> = {
+  forest: { id: 'forest', name: 'Hutan Lumut', bg: '#14110f', tint: '#5a8a3a', emissiveScale: 1.0 },
+  cave: { id: 'cave', name: 'Gua Dalam', bg: '#0e0c14', tint: '#8f6bff', emissiveScale: 1.2 },
+  volcano: { id: 'volcano', name: 'Gunung Berapi', bg: '#160d0c', tint: '#ff6a2a', emissiveScale: 1.35 },
+};
+
+export function themeForFloor(floor: number): ThemeId {
+  const idx = (Math.max(1, floor) - 1) % 3;
+  return (['forest', 'cave', 'volcano'] as ThemeId[])[idx] ?? 'forest';
+}
+
 const TILE_STYLE: Record<TileType, { color: string; emissive?: string; emissiveIntensity?: number }> = {
   start: { color: '#3a2d20', emissive: '#ffb000', emissiveIntensity: 0.25 },
   monster: { color: '#4a2430', emissive: '#ff3b5c', emissiveIntensity: 0.12 },
@@ -127,15 +148,17 @@ function zigzag(length: number): Array<{ gx: number; gz: number; type: TileType 
 }
 
 export class Board {
+  readonly theme: Theme;
   readonly group = new Group();
   readonly tiles: Tile[] = [];
   private readonly tileGeo = new BoxGeometry(TILE_SIZE, 0.26, TILE_SIZE);
 
-  constructor(seed: number) {
+  constructor(seed: number, themeId: ThemeId = 'forest') {
+    this.theme = THEMES[themeId];
     const layout = generateTiles(seed);
     layout.forEach((t, index) => {
       const style = TILE_STYLE[t.type];
-      const opts: { emissive?: string; emissiveIntensity?: number } = { emissiveIntensity: style.emissiveIntensity ?? 0.15 };
+      const opts: { emissive?: string; emissiveIntensity?: number } = { emissiveIntensity: (style.emissiveIntensity ?? 0.15) * this.theme.emissiveScale };
       if (style.emissive) opts.emissive = style.emissive;
       const mat = toonMaterial(style.color, opts);
       const mesh = new Mesh(this.tileGeo, mat);
