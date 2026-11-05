@@ -21,10 +21,10 @@ export const PALETTE = {
 
 let gradient: DataTexture | null = null;
 
-/** Ramp 4 band untuk cel shading (siap dipakai saat kembali ke toon). */
+/** Ramp 4 band untuk cel shading (terang agar tidak gelap). */
 export function getToonGradient(): DataTexture {
   if (gradient) return gradient;
-  const data = new Uint8Array([120, 170, 220, 255]);
+  const data = new Uint8Array([175, 210, 238, 255]);
   gradient = new DataTexture(data, data.length, 1, RedFormat);
   gradient.minFilter = NearestFilter;
   gradient.magFilter = NearestFilter;

@@ -51,8 +51,21 @@ async function boot(): Promise<void> {
       <button class="btn" id="roll-btn" type="button">Lempar Dadu</button>
     </div>
     <div class="skillbar" id="skillbar"></div>
+    <div class="combatpanel" id="combat-panel" hidden>
+      <div class="combatpanel__info">
+        <div class="combatpanel__name" id="monster-name">Monster</div>
+        <div class="combatpanel__intent" id="monster-intent"></div>
+        <div class="combatpanel__bar"><span id="monster-hp-bar"></span></div>
+        <div class="combatpanel__nums" id="monster-hp-nums">0/0</div>
+      </div>
+      <div class="combatpanel__actions">
+        <button class="btn btn--mini" data-action="attack" type="button">Serang</button>
+        <button class="btn btn--mini btn--ghost" data-action="defend" type="button">Bertahan</button>
+        <button class="btn btn--mini btn--ghost" data-action="flee" type="button">Kabur</button>
+      </div>
+    </div>
     <div class="log" id="combat-log"></div>
-    <div class="toast-stack" id="toast-stack" aria-hidden="true"></div>
+    <div class="toast-stack" id="toast-stack" aria-live="polite"></div>
     <div class="endpanel" id="end-panel" hidden>
       <h2 class="endpanel__title" id="end-title"></h2>
       <p class="endpanel__text" id="end-text"></p>
@@ -201,6 +214,20 @@ async function boot(): Promise<void> {
       el.diceValue.textContent = String(game.lastRoll);
       el.rollBtn.disabled = game.busy || s.status === 'won' || s.status === 'dead';
       renderSkills();
+      // Panel combat: HP bar + tombol aksi.
+      const inCombat = s.status === 'combat' && s.monster;
+      combatPanel.hidden = !inCombat;
+      if (inCombat && s.monster) {
+        monsterName.textContent = s.monster.name;
+        const intentMap: Record<string, string> = { normal: '', heavy: 'Serangan Berat!', shield: 'Perisai', dodge: 'Mengelak' };
+        (document.getElementById('monster-intent') as HTMLElement).textContent = intentMap[s.monster.intent] ?? '';
+        const pct = Math.max(0, Math.min(100, (s.monster.hp / s.monster.maxHp) * 100));
+        monsterHpBar.style.width = pct.toFixed(1) + '%';
+        monsterHpNums.textContent = s.monster.hp + '/' + s.monster.maxHp;
+        combatPanel.querySelectorAll('[data-action]').forEach((b) => {
+          (b as HTMLButtonElement).disabled = game.busy;
+        });
+      }
   };
 
   // ---- Hub & aliran ----
@@ -221,6 +248,7 @@ async function boot(): Promise<void> {
       const affordable = canAfford(meta, id);
       const cost = maxed ? 0 : def.cost(lvl);
       row.innerHTML = `
+        <div class="upgrade__ico">${icon(def.icon as never)}</div>
         <div class="upgrade__info">
           <p class="upgrade__name">${def.name}</p>
           <p class="upgrade__desc">${def.desc}</p>
@@ -264,7 +292,7 @@ async function boot(): Promise<void> {
       card.className = 'draft-card';
       card.type = 'button';
       card.innerHTML = `
-        <div class="draft-card__icon">${def.icon}</div>
+        <div class="draft-card__icon drafting-icon">${icon(def.icon as never)}</div>
         <p class="draft-card__name">${def.name}</p>
         <p class="draft-card__rarity draft-card__rarity--${def.rarity}">${def.rarity}</p>
         <p class="draft-card__desc">${def.desc}</p>
@@ -298,6 +326,17 @@ async function boot(): Promise<void> {
     enterHub();
     toast('Run selesai: +' + reward + ' shard.', 'success');
   }
+
+  const combatPanel = document.getElementById('combat-panel')!;
+  const monsterName = document.getElementById('monster-name')!;
+  const monsterHpBar = document.getElementById('monster-hp-bar')!;
+  const monsterHpNums = document.getElementById('monster-hp-nums')!;
+  combatPanel.querySelectorAll('[data-action]').forEach((b) => {
+    b.addEventListener('click', () => {
+      const action = (b as HTMLElement).dataset.action as 'attack' | 'defend' | 'flee';
+      game.doCombatAction(action).catch((err) => console.error(err));
+    });
+  });
 
   const endHubBtn = document.getElementById('end-hub-btn') as HTMLButtonElement;
   endHubBtn.addEventListener('click', () => {

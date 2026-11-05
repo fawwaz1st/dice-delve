@@ -4,6 +4,7 @@ import { CARDS, rollCard, type CardId } from './Cards.js';
 export type Monster_behavior = 'aggressive' | 'guardian' | 'sly';
 export interface MonsterBehavior { name: string; hpBonus: number; atkBonus: number; defBonus: number; dodge: number; }
 
+export type MonsterIntent = 'normal' | 'heavy' | 'shield' | 'dodge';
 export interface MonsterState {
   name: string;
   hp: number;
@@ -11,6 +12,9 @@ export interface MonsterState {
   atk: number;
   def: number;
   behavior: Monster_behavior;
+  intent: MonsterIntent;
+  /** Ronde sejak spawn (untuk pola). */
+  rounds: number;
 }
 
 export interface RunState {
@@ -209,9 +213,11 @@ export class Run {
     const names = tier === 'boss' ? BOSS_NAMES : MONSTER_NAMES;
     const name = names[Math.floor(Math.random() * names.length)]!;
     // Kepribadian: agresif (ATK tinggi), penjaga (DEF/HP tinggi), licik (menghindar).
-    const behavior: Monster_behavior = tier === 'boss'
-      ? (['aggressive', 'guardian', 'sly'] as Monster_behavior[])[Math.floor(Math.random() * 3)]!
-      : (['aggressive', 'guardian', 'sly'] as Monster_behavior[])[Math.floor(Math.random() * 3)]!;
+    const behaviors: Monster_behavior[] = ['aggressive', 'guardian', 'sly'];
+    // Boss berotasi deterministik per lantai (terbaca), monster biasa acak.
+    const behavior = tier === 'boss'
+      ? behaviors[(floor - 1) % 3]!
+      : behaviors[Math.floor(Math.random() * 3)]!;
     const b: MonsterBehavior = behavior === 'aggressive'
       ? { name: 'Agresif', hpBonus: -3, atkBonus: 3, defBonus: 0, dodge: 0 }
       : behavior === 'guardian'
@@ -227,20 +233,38 @@ export class Run {
       atk: Math.max(1, atkBase + b.atkBonus),
       def: Math.max(0, (tier === 'boss' ? 4 : tier === 'elite' ? 2 : 0) + b.defBonus),
       behavior,
+      intent: 'normal',
+      rounds: 0,
     };
   }
 
-  /** Satu ronde combat. Mengembalikan hasil. */
-  combatRound(roll: number): { playerWins: boolean; playerDamage: number; monsterDamage: number; them: string } {
+  /** Satu ronde combat dengan pilihan aksi. */
+  combatRound(roll: number, action: 'attack' | 'defend' | 'flee' = 'attack'): { playerWins: boolean; playerDamage: number; monsterDamage: number; them: string; fled: boolean } {
     const m = this.state.monster;
-    if (!m) return { playerWins: false, playerDamage: 0, monsterDamage: 0, them: 'tidak ada' };
+    if (!m) return { playerWins: false, playerDamage: 0, monsterDamage: 0, them: 'tidak ada', fled: false };
+    m.rounds += 1;
+    // Tentukan serangan monster ronde ini berdasar perilaku (telegraphable).
+    m.intent = m.behavior === 'aggressive' ? (m.rounds % 3 === 0 ? 'heavy' : 'normal')
+      : m.behavior === 'guardian' ? (m.rounds % 3 === 0 ? 'shield' : 'normal')
+      : (m.rounds % 3 === 0 ? 'dodge' : 'normal');
+
+    // Kabur: lempar koin untuk mundur 1 petak; gagal = serangan penuh.
+    if (action === 'flee') {
+      if (Math.random() < 0.5) {
+        this.state.position = Math.max(0, this.state.position - 1);
+        return { playerWins: false, playerDamage: 0, monsterDamage: 0, them: 'kabur', fled: true };
+      }
+      // gagal kabur: monster menyerang penuh.
+    }
     let rollValue = roll;
     if (this.state.fixedRollNext) { rollValue = 6; this.state.fixedRollNext = false; }
     const { value } = this.applyCardRoll(rollValue);
     const bonus = this.diceBonus() + (this.state.bonusDamage ?? 0);
-    // Licik: peluang menghindar dari serangan.
+    // Licik menghindari lagi saat bertahan juga tidak terlalu kuat.
     const dodged = m.behavior === 'sly' && Math.random() < 0.2;
-    const dealt = dodged ? 0 : (value + bonus >= m.def ? value + bonus : 0);
+    let dealtBase = dodged ? 0 : (value + bonus >= m.def ? value + bonus : 0);
+    // Bertahan: damage setengah (aman tapi lambat).
+    const dealt = action === 'defend' ? Math.floor(dealtBase / 2) : dealtBase;
     m.hp = Math.max(0, m.hp - dealt);
 
     let taken = 0;
@@ -248,10 +272,15 @@ export class Run {
       if (this.state.skipNextMonster) {
         this.state.skipNextMonster = false;
         taken = 0;
+      } else if (m.intent === 'dodge') {
+        taken = 0;
       } else if (Math.random() < this.dodgeChance()) {
         taken = 0;
       } else {
         taken = Math.max(0, m.atk - this.cardDamageReduction());
+        if (m.intent === 'heavy') taken = Math.floor(taken * 1.6);
+        if (m.intent === 'shield') taken = Math.floor(taken * 0.3);
+        if (action === 'defend') taken = Math.floor(taken / 2);
       }
       this.state.hp = Math.max(0, this.state.hp - taken);
     }
@@ -260,13 +289,13 @@ export class Run {
     if (m.hp <= 0) {
       this.state.kills += 1;
       them = 'menang';
-      return { playerWins: true, playerDamage: dealt, monsterDamage: taken, them };
+      return { playerWins: true, playerDamage: dealt, monsterDamage: taken, them, fled: false };
     }
     if (this.state.hp <= 0) {
       them = 'kalah';
-      return { playerWins: false, playerDamage: dealt, monsterDamage: taken, them };
+      return { playerWins: false, playerDamage: dealt, monsterDamage: taken, them, fled: false };
     }
-    return { playerWins: false, playerDamage: dealt, monsterDamage: taken, them: 'bertahan' };
+    return { playerWins: false, playerDamage: dealt, monsterDamage: taken, them: 'bertahan', fled: false };
   }
 
   cardGoldMul(): number {

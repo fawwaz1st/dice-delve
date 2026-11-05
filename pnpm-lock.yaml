@@ -8,15 +8,9 @@ importers:
 
   .:
     dependencies:
-      '@dimforge/rapier3d-compat':
-        specifier: 0.21.0
-        version: 0.21.0
       three:
         specifier: 0.187.0
         version: 0.187.0
-      zustand:
-        specifier: 5.0.16
-        version: 5.0.16
     devDependencies:
       '@types/three':
         specifier: 0.187.0
@@ -38,9 +32,6 @@ packages:
 
   '@dimforge/rapier3d-compat@0.12.0':
     resolution: {integrity: sha512-uekIGetywIgopfD97oDL5PfeezkFpNhwlzlaEYNOA0N6ghdsOvh/HYjSMek5Q2O1PYvRSDFcqFVJl4r4ZBwOow==}
-
-  '@dimforge/rapier3d-compat@0.21.0':
-    resolution: {integrity: sha512-tCl1HPGwOhn5aCQbgqWbOH+Nx/5fnr3IPAnzQuR7zIhC/raqi2yxC6LhvZqjdI2El5hQgY5RDAwDrAjAi2FdPA==}
 
   '@eslint-community/eslint-utils@4.10.1':
     resolution: {integrity: sha512-cuadcxVFE8sDK6iWJbs8Sn0av2Nrh2QSGQhVlBW9AaAHqHwjWsZHT8LJ4hFGPh7ASBV2deFdM7H/DPjulmh8rg==}
@@ -880,29 +871,9 @@ packages:
     resolution: {integrity: sha512-rVksvsnNCdJ/ohGc6xgPwyN8eheCxsiLM8mxuE/t/mOVqJewPuO1miLpTHQiRgTKCLexL4MeAFVagts7HmNZ2Q==}
     engines: {node: '>=10'}
 
-  zustand@5.0.16:
-    resolution: {integrity: sha512-Uv7e327ihlCfayfja3hDc0M64Upev1LWBKpRobdK4NyovDDPeeX4imWXc/wzC1yc6fkYPoAY/ncKVPAs2jrtQw==}
-    engines: {node: '>=12.20.0'}
-    peerDependencies:
-      '@types/react': '>=18.0.0'
-      immer: '>=9.0.6'
-      react: '>=18.0.0'
-      use-sync-external-store: '>=1.2.0'
-    peerDependenciesMeta:
-      '@types/react':
-        optional: true
-      immer:
-        optional: true
-      react:
-        optional: true
-      use-sync-external-store:
-        optional: true
-
 snapshots:
 
   '@dimforge/rapier3d-compat@0.12.0': {}
-
-  '@dimforge/rapier3d-compat@0.21.0': {}
 
   '@eslint-community/eslint-utils@4.10.1(eslint@9.39.0(supports-color@7.2.0))':
     dependencies:
@@ -1610,5 +1581,3 @@ snapshots:
   word-wrap@1.2.5: {}
 
   yocto-queue@0.1.0: {}
-
-  zustand@5.0.16: {}

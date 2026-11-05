@@ -31,7 +31,7 @@ export interface CardDef {
 export const CARDS: Record<CardId, CardDef> = {
   ember: {
     id: 'ember', name: 'Bara Api', rarity: 'common', icon: 'flame',
-    desc: 'Dadu +1 tiap giliran.', damageBonus: 1,
+    desc: '+1 damage untuk setiap serangan.', damageBonus: 1,
     active: { name: 'Ledakan', desc: '8 damage ke monster.', cooldown: 3, kind: 'damage', amount: 8 },
   },
   stone: {
@@ -40,7 +40,7 @@ export const CARDS: Record<CardId, CardDef> = {
   },
   feather: {
     id: 'feather', name: 'Bulu Angin', rarity: 'uncommon', icon: 'wind',
-    desc: '25% peluang melempar dadu dua kali.', doubleChance: 0.25,
+    desc: '25% peluang mengulang dadu sekali.', doubleChance: 0.25,
     active: { name: 'Sapuan', desc: '5 damage, lalu hindari serangan berikutnya.', cooldown: 3, kind: 'damage', amount: 5 },
   },
   clover: {

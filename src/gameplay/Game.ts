@@ -71,7 +71,11 @@ export class Game {
     this.run.start(todaySeed());
     if (bonuses) this.run.applyMetaBonuses(bonuses.maxHp, bonuses.damage, bonuses.diceBonus, bonuses.goldMultiplier);
     this.piece.place(this.tileWorld(0));
-    this.die = this.dice.spawn(new Vector3(4, 4, 4));
+    const near = this.tileWorld(0).clone();
+    near.x += 2.2;
+    near.z += 0.5;
+    near.y = 3;
+    this.die = this.dice.spawn(near);
   }
 
   /** Bangun ulang papan 3D dari seed run saat ini. */
@@ -278,14 +282,33 @@ export class Game {
     this.run.state.monster = null;
   }
 
+  /** Satu ronde combat: attack, defend, atau flee. */
+  async doCombatAction(action: 'attack' | 'defend' | 'flee'): Promise<void> {
+    if (this.busy) return;
+    const st = this.run.state;
+    if (st.status !== 'combat') return;
+    this.busy = true;
+    this.run.beginRoll();
+    this.events.onState();
+    await this.doCombatRound(action);
+    this.busy = false;
+    this.events.onState();
+  }
+
   /** Satu ronde combat yang digerakkan oleh klik Lempar. */
-  private async doCombatRound(): Promise<void> {
+  private async doCombatRound(action: 'attack' | 'defend' | 'flee' = 'attack'): Promise<void> {
     const st = this.run.state;
     const m = st.monster;
     if (!m || m.hp <= 0) return;
     const combatValue = await this.dice.roll(this.die);
     this.lastRoll = combatValue;
-    const res = this.run.combatRound(combatValue);
+    const res = this.run.combatRound(combatValue, action);
+    if (res.fled) {
+      this.exitCombat();
+      this.piece.place(this.tileWorld(st.position));
+      this.toastAt('Kabur! Mundur ke petak ' + (st.position + 1) + '.', 'info');
+      return;
+    }
     audio.hit();
     this.flashMonster();
     if (res.playerDamage > 0) {

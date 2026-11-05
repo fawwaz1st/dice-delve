@@ -15,18 +15,35 @@ export class Renderer {
   }
 
   static async create(canvas: HTMLCanvasElement, tier: DeviceTier): Promise<Renderer> {
-    const gpu = new WebGPURenderer({
+    const configure = (gpu: WebGPURenderer): void => {
+      gpu.setPixelRatio(Math.min(window.devicePixelRatio || 1, tier === 'low' ? 1.5 : 2));
+      gpu.shadowMap.enabled = true;
+      gpu.shadowMap.type = PCFSoftShadowMap;
+      gpu.toneMapping = ACESFilmicToneMapping;
+      gpu.toneMappingExposure = 1.25;
+    };
+
+    // Coba WebGPU dulu; bila init gagal (browser lama), paksa WebGL2.
+    let gpu = new WebGPURenderer({
       canvas,
       antialias: true,
       alpha: false,
       powerPreference: 'high-performance',
     });
-    gpu.setPixelRatio(Math.min(window.devicePixelRatio || 1, tier === 'low' ? 1.5 : 2));
-    gpu.shadowMap.enabled = true;
-    gpu.shadowMap.type = PCFSoftShadowMap;
-    gpu.toneMapping = ACESFilmicToneMapping;
-    gpu.toneMappingExposure = 1.25;
-    await gpu.init();
+    configure(gpu);
+    try {
+      await gpu.init();
+    } catch {
+      gpu = new WebGPURenderer({
+        canvas,
+        antialias: true,
+        alpha: false,
+        powerPreference: 'high-performance',
+        forceWebGL: true,
+      });
+      configure(gpu);
+      await gpu.init();
+    }
     return new Renderer(gpu, canvas, tier);
   }
 
