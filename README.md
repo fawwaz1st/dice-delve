@@ -1,29 +1,42 @@
 # Ular Tangga Modern
 
+![Menu utama](docs/menu.png)
+
+![Papan permainan](docs/gameplay.png)
+
 Permainan papan Ular Tangga yang berjalan langsung di browser. Papan 10x10 diacak ulang setiap permainan, ada lawan AI, sistem kartu skill, mode cepat, dan bisa dipasang sebagai PWA (offline).
 
 Demo: https://fawwaz1st.github.io/ulartangga/
 
-## Konsep desain
+## Cara main
 
-Arah visualnya satu kalimat: papan ular tangga kayu warung yang sudah dimainkan bertahun-tahun.
+```mermaid
+flowchart TD
+    M[Menu] --> D[Pilih kesulitan]
+    D --> K[Draft kartu pertama]
+    K --> G[Giliran]
+    G --> R[Lempar dadu]
+    R --> W[Pion berjalan]
+    W --> C{Ular atau tangga?}
+    C -->|tangga| L[Naik ke petak atas]
+    C -->|ular| S[Turun ke petak ekor]
+    C -->|kosong| P{Kartu skill?}
+    L --> W2[Cek menang]
+    S --> W2
+    P -->|pakai| R
+    P -->|lewati| W2
+    W2 -->|belum| N[Giliran berikutnya]
+    W2 -->|petak 100| MENANG[Menang]
+    N --> G
+```
 
-Semua keputusan mengikuti itu:
-- Latar: meja kayu (serat berlapis, cahaya dari atas, vignette).
-- Papan: papan cat di atas meja (kertas manila, kotak cetakan tinta, jalur digambar tangan).
-- Panel: papan yang dipaku (sudut paku, bayangan keras).
-- Menu: kotak permainan (tutup berengsel, label kertas miring, segel stempel).
-- Statistik: slip kertas (selotip di atas, tiap slip miring ke arah berbeda).
-- Kartu skill: kartu remi (kertas, tepi warna kelangkaan).
-- Teks: ukiran dan cat (ukir untuk papan, cat untuk label).
+Aturan singkat:
 
-Konsekuensi teknis:
-- Warna di ruang OKLCH agar variasi terang-gelap seragam secara persepsi.
-- Bayangan dua lapis: satu offset keras (cetak) + satu sebaran halus (fisik).
-- Radius sudut berbeda per komponen (4 / 7 / 10 / 11 px).
-- Ikon fungsional adalah SVG garis di icons.js, bisa diwarnai lewat CSS. Tidak ada emoji.
-- Gerakan punya sebab: dadu memipih saat mendarat, pion melompat antar petak, papan bergetar saat kena ular.
-- Aksesibilitas sebagai fondasi: kontras WCAG AA terverifikasi, narasi pembaca layar, jebakan fokus modal, prefers-reduced-motion dihormati termasuk konfeti.
+1. Klik dadu atau tekan Spasi saat giliranmu.
+2. Petak tangga menaikkan pion, petak ular menurunkannya.
+3. Lemparan yang melewati petak 100 memantul kembali.
+4. Mainkan kartu skill saat giliranmu. Satu efek aktif per waktu.
+5. Pemain pertama yang mencapai petak 100 menang.
 
 ## Fitur
 
@@ -31,14 +44,12 @@ Konsekuensi teknis:
 - Aturan klasik: lemparan yang melewati petak 100 memantul kembali.
 - Hingga 3 lawan AI yang juga memainkan kartu skill.
 - 10 kartu skill (Dadu Ganda, Pacu Tangga, Perisai Ular, Teleportasi, Tukar Posisi, dan lainnya) dengan cooldown.
-- Mode Cepat mempersingkat animasi dan jeda berpikir AI.
-- Kesulitan Mudah/Normal/Sulit: mengubah jumlah kartu AI (1/3/4) dan agresivitasnya.
 - Draft kartu awal: pilih 1 dari 3 kartu sebagai keputusan pertama.
-- Tutorial 3 langkah saat permainan pertama.
-- Pintasan keyboard: Spasi lempar, 1-3 pakai kartu, M musik, R papan baru.
-- FAB "Lempar" di mobile untuk jangkauan jempol.
+- Kesulitan Mudah/Normal/Sulit: mengubah jumlah kartu AI (1/3/4) dan agresivitasnya.
+- Mode Cepat mempersingkat animasi dan jeda berpikir AI.
 - Simpanan otomatis: bila tab tertutup, tawaran lanjut muncul saat dibuka lagi.
 - Suara dan musik disintesis dengan Web Audio API, tanpa berkas audio.
+- Musik adaptif: intensitas mengikuti selisih posisi dan zona sprint.
 - Getaran haptic berbeda per peristiwa (lempar, tangga, ular, menang), bisa dimatikan.
 - Wake Lock: layar tetap menyala selama bermain.
 - Konfeti kemenangan di canvas, dilewati bila pengguna memilih gerakan minimal.
@@ -47,7 +58,9 @@ Konsekuensi teknis:
 - Transisi halaman lewat View Transitions API (Chromium 126+).
 - Statistik: total main, pemenang terakhir, kemenanganmu, kemenangan AI, rasio menangmu, rekor giliran.
 - Responsif: tiga zona asimetris di desktop, bertumpuk di layar sempit, papan selalu utuh tanpa scroll.
-- Aksesibilitas: narasi peristiwa lewat live region, jebakan fokus di modal, navigasi Spasi/Escape, kontras WCAG AA.
+- FAB Lempar di mobile untuk jangkauan jempol.
+- Pintasan keyboard: Spasi lempar, 1-3 pakai kartu, M musik, R papan baru.
+- Aksesibilitas: narasi peristiwa lewat live region, jebakan fokus di modal, navigasi penuh keyboard, kontras WCAG AA, dukungan reduced-motion dan forced-colors.
 
 ## Menjalankan
 
@@ -64,35 +77,28 @@ Regenerasi ikon (favicon + PNG manifest) setelah mengubah palet:
 
     python scripts/make-favicon.py
 
-## Cara bermain
-
-1. Pilih Mulai Permainan, atur jumlah pemain dan mode di Pengaturan.
-2. Klik dadu atau tekan Spasi saat giliranmu.
-3. Petak tangga menaikkan pion, petak ular menurunkannya.
-4. Mainkan kartu skill saat giliranmu. Satu efek aktif per waktu.
-5. Pemain pertama yang mencapai petak 100 menang. Tekan Bagikan di kartu kemenangan untuk membagikan hasil.
-
 ## Struktur proyek
 
     .
     ├── index.html              # Perantara, mengalihkan ke menu
     ├── manifest.webmanifest    # Identitas PWA (nama, ikon, warna)
     ├── sw.js                   # Service worker: precache, offline, SWR font
+    ├── docs/                   # Tangkapan layar untuk README
     ├── views/
     │   ├── menu.html           # Kotak permainan: mulai, tutorial, pengaturan, statistik
     │   └── game.html           # Meja permainan
     ├── assets/
     │   ├── css/
-    │   │   ├── base.css        # Token OKLCH, tekstur kayu & kertas, tombol, modal, toast, view transitions
+    │   │   ├── base.css        # Token OKLCH, tekstur kayu & kertas, tombol, modal, toast
     │   │   ├── menu.css        # Kotak kayu, label kertas, slip statistik
     │   │   └── game.css        # Meja, papan, dadu, kartu skill, papan skor
     │   ├── js/
-    │   │   ├── core.js         # Utilitas, penyimpanan, toast, haptic, narasi a11y, fokus modal, pendaftaran SW
+    │   │   ├── core.js         # Utilitas, penyimpanan, toast, haptic, narasi a11y, fokus modal
     │   │   ├── icons.js        # Sprite ikon SVG, tanpa emoji fungsional
     │   │   ├── audio.js        # Suara kayu & kertas disintesis (Web Audio API)
     │   │   ├── confetti.js     # Perayaan kemenangan di canvas
-    │   │   ├── skills.js       # Katalog skill, cooldown, efek, heuristik AI. Logika murni tanpa DOM
-    │   │   ├── game.js         # Mesin permainan: papan, giliran, animasi, AI, wake lock, bagikan, simpanan
+    │   │   ├── skills.js       # Katalog skill, cooldown, efek, heuristik AI
+    │   │   ├── game.js         # Mesin permainan: papan, giliran, animasi, AI, simpanan
     │   │   └── menu.js         # Logika halaman menu
     │   └── images/
     │       ├── favicon.ico     # Dibuat oleh scripts/make-favicon.py
