@@ -1,137 +1,137 @@
-# Ular Tangga Modern
+# Dice Delve
 
-![Menu utama](docs/menu.png)
+![Papan permainan](docs/board.png)
 
-![Papan permainan](docs/gameplay.png)
+![Gameplay](docs/gameplay.png)
 
-Permainan papan Ular Tangga yang berjalan langsung di browser. Papan 10x10 diacak ulang setiap permainan, ada lawan AI, sistem kartu skill, mode cepat, dan bisa dipasang sebagai PWA (offline).
+Board-roguelike 3D stylized yang berjalan langsung di browser: lempar dadu,
+jelajahi papan prosedural, kumpulkan kartu, dan kalahkan bos. Papan 10x10
+diacak ulang setiap run, lawan AI, sistem kartu relic, dan bisa dipasang
+sebagai PWA (offline).
 
-Demo: https://fawwaz1st.github.io/ulartangga/
+Demo: https://fawwaz1st.github.io/dice-delve/
 
 ## Cara main
 
 ```mermaid
 flowchart TD
-    M[Menu] --> D[Pilih kesulitan]
-    D --> K[Draft kartu pertama]
-    K --> G[Giliran]
-    G --> R[Lempar dadu]
-    R --> W[Pion berjalan]
-    W --> C{Ular atau tangga?}
-    C -->|tangga| L[Naik ke petak atas]
-    C -->|ular| S[Turun ke petak ekor]
-    C -->|kosong| P{Kartu skill?}
-    L --> W2[Cek menang]
-    S --> W2
-    P -->|pakai| R
-    P -->|lewati| W2
-    W2 -->|belum| N[Giliran berikutnya]
-    W2 -->|petak 100| MENANG[Menang]
-    N --> G
+    A[Run mulai] --> B[Lempar dadu]
+    B --> C[Pion melompat]
+    C --> D{Petak tujuan?}
+    D -->|monster / elite / bos| E[Combat turn-based]
+    D -->|harta| F[+Emas / kartu]
+    D -->|jebakan| G[Damage]
+    D -->|toko| H[Beli kartu]
+    D -->|istirahat| I[+HP]
+    E -->|menang| J[+Emas]
+    J --> K{Cek menang?}
+    E -->|kalah| L[Run selesai]
+    F --> K
+    G --> K
+    H --> K
+    I --> K
+    K -->|belum| B
+    K -->|papan habis| M[Menang lantai]
+    M --> N[Lantai berikutnya]
 ```
 
 Aturan singkat:
 
-1. Klik dadu atau tekan Spasi saat giliranmu.
-2. Petak tangga menaikkan pion, petak ular menurunkannya.
-3. Lemparan yang melewati petak 100 memantul kembali.
-4. Mainkan kartu skill saat giliranmu. Satu efek aktif per waktu.
-5. Pemain pertama yang mencapai petak 100 menang.
+1. Klik Lempar Dadu (atau tekan tombol di layar) saat giliranmu.
+2. Pion melompat sejumlah langkah sesuai nilai dadu.
+3. Petak monster memulai combat turn-based melawan AI.
+4. Kartu relic memperkuat dadu dan memberi efek di setiap giliran.
+5. Kalahkan bos untuk menembus papan dan masuk lantai berikutnya.
+6. HP mencapai nol mengakhiri run.
 
 ## Fitur
 
-- Papan acak 10x10 dengan 7 tangga dan 7 ular, posisi baru tiap permainan.
-- Aturan klasik: lemparan yang melewati petak 100 memantul kembali.
-- Hingga 3 lawan AI yang juga memainkan kartu skill.
-- 10 kartu skill (Dadu Ganda, Pacu Tangga, Perisai Ular, Teleportasi, Tukar Posisi, dan lainnya) dengan cooldown.
-- Draft kartu awal: pilih 1 dari 3 kartu sebagai keputusan pertama.
-- Kesulitan Mudah/Normal/Sulit: mengubah jumlah kartu AI (1/3/4) dan agresivitasnya.
-- Mode Cepat mempersingkat animasi dan jeda berpikir AI.
-- Simpanan otomatis: bila tab tertutup, tawaran lanjut muncul saat dibuka lagi.
-- Suara dan musik disintesis dengan Web Audio API, tanpa berkas audio.
-- Musik adaptif: intensitas mengikuti selisih posisi dan zona sprint.
-- Getaran haptic berbeda per peristiwa (lempar, tangga, ular, menang), bisa dimatikan.
-- Wake Lock: layar tetap menyala selama bermain.
-- Konfeti kemenangan di canvas, dilewati bila pengguna memilih gerakan minimal.
-- Tombol Bagikan: Web Share API dengan fallback salin ke clipboard.
-- PWA: bisa dipasang ke layar utama dan dimainkan offline (service worker + manifest).
-- Transisi halaman lewat View Transitions API (Chromium 126+).
-- Statistik: total main, pemenang terakhir, kemenanganmu, kemenangan AI, rasio menangmu, rekor giliran.
-- Responsif: tiga zona asimetris di desktop, bertumpuk di layar sempit, papan selalu utuh tanpa scroll.
-- FAB Lempar di mobile untuk jangkauan jempol.
-- Pintasan keyboard: Spasi lempar, 1-3 pakai kartu, M musik, R papan baru.
-- Aksesibilitas: narasi peristiwa lewat live region, jebakan fokus di modal, navigasi penuh keyboard, kontras WCAG AA, dukungan reduced-motion dan forced-colors.
+- Papan prosedural 10x10 dengan 34 petak — monster, elite, harta, jebakan,
+  toko, istirahat, dan bos — seed harian (xorshift) sehingga papan bisa
+  dibagikan dan diulang.
+- Dadu 3D dengan animasi tween deterministik yang mendarat tepat pada
+  nilai yang terpilih.
+- Combat turn-based melawan AI dengan HP, serangan, dan pertahanan; elite
+  dan bos yang lebih tangguh di lantai yang lebih dalam.
+- 6 kartu relic (Bara Api, Batu Karat, Semanggi, Bulu Angin, Mata Ketiga,
+  Pijar) dengan efek damage, regenerasi, dodge, dan dadu minimum.
+- Toko untuk membeli kartu dengan emas, petak harta untuk emas dan kartu,
+  jebakan yang memberi damage, istirahat yang memulihkan HP.
+- Progresi lantai: papan baru tiap lantai, HP/emas/kartu dipertahankan.
+- Audio disintesis penuh (Web Audio): SFX lempar, lompat, tabrakan, koin,
+  kartu, menang, kalah, plus musik pentatonik adaptif. Tombol bisu di HUD.
+- PWA: bisa dipasang ke layar utama dan dimainkan offline.
+- WebGPURenderer (Three.js) dengan fallback WebGL2 otomatis.
+- Loop fixed-timestep dengan interpolasi; deteksi tier perangkat dan
+  pixel ratio clamp untuk 60fps di laptop menengah dan ponsel.
+- Responsif: HUD adaptif, toast, log combat, layar akhir (menang/kalah),
+  dan dukungan reduced-motion.
 
 ## Menjalankan
 
-Buka index.html di browser. Tidak ada langkah build.
+Prasyarat: Node.js 20+ dan pnpm.
 
-Karena font diambil dari CDN, disarankan memakai server statis lokal:
+    pnpm install
+    pnpm dev        # http://127.0.0.1:5173/dice-delve/
+    pnpm build      # bundle ke dist/
 
-    python -m http.server 8000
-    # lalu buka http://localhost:8000
-
-PWA: kunjungi lewat https (GitHub Pages) atau localhost, lalu pasang dari menu browser. Setelah satu sesi online, seluruh aset tercache dan permainan tetap jalan tanpa koneksi.
-
-Regenerasi ikon (favicon + PNG manifest) setelah mengubah palet:
-
-    python scripts/make-favicon.py
+Deployment ke GitHub Pages ditangani GitHub Actions (push ke main).
 
 ## Struktur proyek
 
     .
-    ├── index.html              # Perantara, mengalihkan ke menu
-    ├── manifest.webmanifest    # Identitas PWA (nama, ikon, warna)
-    ├── sw.js                   # Service worker: precache, offline, SWR font
+    ├── index.html              # Entri Vite
+    ├── public/
+    │   ├── manifest.webmanifest
+    │   ├── sw.js               # Service worker offline-first
+    │   └── icons/
     ├── docs/                   # Tangkapan layar untuk README
-    ├── views/
-    │   ├── menu.html           # Kotak permainan: mulai, tutorial, pengaturan, statistik
-    │   └── game.html           # Meja permainan
-    ├── assets/
-    │   ├── css/
-    │   │   ├── base.css        # Token OKLCH, tekstur kayu & kertas, tombol, modal, toast
-    │   │   ├── menu.css        # Kotak kayu, label kertas, slip statistik
-    │   │   └── game.css        # Meja, papan, dadu, kartu skill, papan skor
-    │   ├── js/
-    │   │   ├── core.js         # Utilitas, penyimpanan, toast, haptic, narasi a11y, fokus modal
-    │   │   ├── icons.js        # Sprite ikon SVG, tanpa emoji fungsional
-    │   │   ├── audio.js        # Suara kayu & kertas disintesis (Web Audio API)
-    │   │   ├── confetti.js     # Perayaan kemenangan di canvas
-    │   │   ├── skills.js       # Katalog skill, cooldown, efek, heuristik AI
-    │   │   ├── game.js         # Mesin permainan: papan, giliran, animasi, AI, simpanan
-    │   │   └── menu.js         # Logika halaman menu
-    │   └── images/
-    │       ├── favicon.ico     # Dibuat oleh scripts/make-favicon.py
-    │       ├── favicon.svg
-    │       ├── icon-180.png    # apple-touch-icon iOS
-    │       ├── icon-192.png    # Ikon manifest PWA
-    │       ├── icon-512.png
-    │       └── icon-maskable-512.png
-    ├── scripts/
-    │   └── make-favicon.py     # Gambar ulang favicon + ikon PWA (PIL)
+    ├── src/
+    │   ├── main.ts             # Orkestrasi boot, HUD, loop
+    │   ├── core/
+    │   │   ├── Renderer.ts     # WebGPURenderer + fallback WebGL2
+    │   │   ├── Loop.ts         # Fixed timestep + interpolasi
+    │   │   ├── Platform.ts     # Deteksi tier perangkat
+    │   │   └── EventBus.ts
+    │   ├── render/
+    │   │   ├── Scene.ts        # Meja, papan, cahaya, kamera
+    │   │   └── Materials.ts    # Palet, material, outline ink
+    │   ├── gameplay/
+    │   │   ├── Board.ts        # Papan prosedural (DFS backtracking)
+    │   │   ├── Dice.ts         # Dadu animasi tween
+    │   │   ├── Piece.ts        # Pion dengan squash & stretch
+    │   │   ├── Cards.ts        # Katalog kartu relic
+    │   │   ├── Run.ts          # Mesin aturan (state, giliran, combat)
+    │   │   └── Game.ts         # Orkestrator turn-based
+    │   ├── audio/
+    │   │   └── AudioEngine.ts  # SFX + musik disintesis Web Audio
+    │   ├── ui/
+    │   │   └── styles.css      # HUD, toast, panel akhir
+    │   └── utils/
+    │       └── tween.ts        # Sistem tween (easing, fallback timer)
+    ├── .github/workflows/
+    │   └── deploy.yml          # Build + deploy GitHub Pages
+    ├── package.json
+    ├── tsconfig.json
+    ├── vite.config.ts
     ├── LICENSE
     └── README.md
 
-Urutan pemuatan: core.js -> icons.js -> audio.js -> (confetti.js, skills.js) -> game.js atau menu.js.
-Semua modul berbagi satu namespace window.UT; tidak ada variabel global yang bocor.
-
 ## Teknologi
 
-- Vanilla JavaScript (ES2020) dengan pola IIFE, tanpa dependensi runtime.
-- OKLCH untuk seluruh token warna.
-- CSS Grid dengan area bernama + container query (cqw) untuk tata letak papan.
-- Web Audio API untuk seluruh suara.
-- SVG inline untuk ikon dan jalur ular/tangga.
-- Service Worker + Web App Manifest untuk PWA yang bisa dipasang dan offline.
-- View Transitions API (cross-document), Wake Lock, Vibration, Web Share, Clipboard — semuanya peningkatan progresif.
-- Google Fonts: Fraunces (judul), Karla (teks), Space Mono (label).
+- TypeScript 7 (strict) + Vite 8.
+- Three.js r187: WebGPURenderer + TSL, fallback WebGL2.
+- Web Audio API untuk seluruh suara (tanpa berkas).
+- Service Worker + Web App Manifest untuk PWA.
+- Google Fonts: Fraunces, Karla, Space Mono.
 
 ## Roadmap
 
-- Multiplayer online lewat WebSocket atau WebRTC
-- Tema papan dan pion yang bisa dipilih
-- Papan harian ber-seed dan mutator
-- Mode turnamen dengan bagan pertandingan
+- Hub meta-progresi dan upgrade permanen
+- Draft kartu di awal run
+- Duel async antar pemain (leaderboard musiman)
+- Tema papan dan kosmetik pion
+- Battle pass ringan
 
 ## Kontribusi
 
