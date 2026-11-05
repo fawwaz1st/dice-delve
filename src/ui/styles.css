@@ -276,3 +276,51 @@ html, body {
   color: var(--ink-dim);
 }
 .endpanel .btn { width: 100%; }
+
+/* Layar judul */
+.titlescreen {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: var(--s4);
+  padding: 24px;
+  background:
+    radial-gradient(ellipse at 50% 40%, rgba(60, 44, 28, 0.0), rgba(20, 17, 15, 0.72) 75%),
+    linear-gradient(180deg, rgba(20, 17, 15, 0.2), rgba(20, 17, 15, 0.9));
+  text-align: center;
+}
+.titlescreen[hidden] { display: none; }
+.titlescreen__title {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: clamp(2.4rem, 8vw, 4.2rem);
+  line-height: 0.95;
+  letter-spacing: -0.03em;
+  margin: 0;
+  color: var(--ink);
+  text-shadow: 0 4px 0 rgba(0,0,0,0.5), 0 12px 32px rgba(0,0,0,0.6);
+}
+.titlescreen__title em {
+  font-style: normal;
+  color: var(--gold);
+}
+.titlescreen__tag {
+  margin: 0;
+  max-width: 420px;
+  font-size: 0.95rem;
+  line-height: 1.5;
+  color: var(--ink);
+  text-shadow: 0 2px 8px rgba(0,0,0,0.8);
+}
+.titlescreen__how {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+}
+.titlescreen .btn { min-height: 56px; padding: 0 36px; font-size: 1.05rem; }

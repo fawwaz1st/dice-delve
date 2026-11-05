@@ -53,6 +53,17 @@ async function boot(): Promise<void> {
   `;
   document.body.appendChild(hud);
 
+  // Layar judul: run dimulai saat pemain menekan Mulai.
+  const titleScreen = document.createElement('div');
+  titleScreen.className = 'titlescreen';
+  titleScreen.innerHTML = `
+    <h1 class="titlescreen__title">Dice <em>Delve</em></h1>
+    <p class="titlescreen__tag">Board-roguelike 3D stylized. Lempar dadu, jelajahi papan prosedural, kumpulkan kartu, dan kalahkan bos.</p>
+    <button class="btn" id="start-btn" type="button">Mulai</button>
+    <p class="titlescreen__how">Lempar dadu · Bergerak · Bertarung · Tahankan kartu</p>
+  `;
+  document.body.appendChild(titleScreen);
+
   const endPanel = document.getElementById('end-panel')!;
   const endTitle = document.getElementById('end-title')!;
   const endText = document.getElementById('end-text')!;
@@ -132,7 +143,15 @@ async function boot(): Promise<void> {
 
   rig.root.add(game.piece.group);
   rig.root.add(game.tomb);
-  game.start();
+
+  // Tampilkan papan saja di belakang layar judul; run mulai saat Mulai.
+  const startBtn = document.getElementById('start-btn') as HTMLButtonElement;
+  startBtn.addEventListener('click', () => {
+    audio.unlock();
+    titleScreen.hidden = true;
+    game.start();
+    updateUI();
+  });
 
   el.rollBtn.addEventListener('click', () => {
     audio.unlock();
