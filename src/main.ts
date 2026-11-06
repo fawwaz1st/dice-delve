@@ -71,6 +71,7 @@ async function boot(): Promise<void> {
         <button class="btn btn--mini btn--ghost" data-action="defend" type="button">Bertahan</button>
         <button class="btn btn--mini btn--ghost" data-action="flee" type="button">Kabur</button>
       </div>
+      <button class="btn eventbtn" id="event-btn" type="button" hidden>Nilai Risiko</button>
     </div>
     <div class="log" id="combat-log"></div>
     <div class="toast-stack" id="toast-stack" aria-live="polite"></div>
@@ -185,6 +186,48 @@ async function boot(): Promise<void> {
     });
   }
 
+  // Sorot petak yang bisa dipilih selama mode pilih langkah.
+  let lastHighlighted = new Set<number>();
+  function clearTileHighlight(): void {
+    for (const idx of lastHighlighted) {
+      const t = boardRef().tiles[idx];
+      if (t && t.mesh.scale) t.mesh.scale.set(1, 1, 1);
+      if (t && t.mesh.scale) t.mesh.position.y = 0.24;
+    }
+    lastHighlighted.clear();
+  }
+  function updateChoiceHighlight(): void {
+    const s = game.run.state;
+    if (!game.choosing) { clearTileHighlight(); el.rollBtn.textContent = 'Lempar Dadu'; return; }
+    el.rollBtn.textContent = 'Pilih Petak (' + game.pendingDice + ')';
+    const from = s.position;
+    const to = Math.min(s.tiles.length - 1, from + game.pendingDice);
+    for (let i = from + 1; i <= to; i += 1) {
+      const t = boardRef().tiles[i];
+      if (!t) continue;
+      t.mesh.scale.set(1.15, 1.6, 1.15);
+      t.mesh.position.y = 0.34;
+      lastHighlighted.add(i);
+    }
+  }
+
+  // Klik petak dalam mode pilih -> pilih langkah.
+  {
+    const { Raycaster, Vector2 } = await import('three/webgpu');
+    const ray = new Raycaster();
+    const ptr = new Vector2();
+    canvas.addEventListener('pointerdown', (e) => {
+      if (!game.choosing) return;
+      ptr.x = (e.clientX / window.innerWidth) * 2 - 1;
+      ptr.y = -(e.clientY / window.innerHeight) * 2 + 1;
+      ray.setFromCamera(ptr, rig.camera);
+      const hit = ray.intersectObjects(boardRef().tiles.map((t) => t.mesh))[0];
+      if (!hit) return;
+      const idx = (hit.object as unknown as { userData: { tileIndex: number } }).userData.tileIndex;
+      if (typeof idx === 'number') game.chooseTile(idx);
+    });
+  }
+
   // Fungsi pemutakhir UI: dipanggil setiap giliran DAN setelah ganti papan.
   const updateUI = (): void => {
       const s = game.run.state;
@@ -223,6 +266,10 @@ async function boot(): Promise<void> {
       el.diceValue.textContent = String(game.lastRoll);
       el.rollBtn.disabled = game.busy || s.status === 'won' || s.status === 'dead';
       renderSkills();
+      updateChoiceHighlight();
+      const eventPending = !!(game as unknown as { eventResolver: unknown }).eventResolver;
+      (document.getElementById('event-btn') as HTMLButtonElement).hidden = !eventPending;
+      (document.getElementById('event-btn') as HTMLButtonElement).disabled = !eventPending;
       // Panel combat: HP bar + tombol aksi.
       const inCombat = s.status === 'combat' && s.monster;
       combatPanel.hidden = !inCombat;
@@ -344,6 +391,7 @@ async function boot(): Promise<void> {
   }
 
   const combatPanel = document.getElementById('combat-panel')!;
+  const boardRef = (): Board => game.board;
   const monsterName = document.getElementById('monster-name')!;
   const monsterHpBar = document.getElementById('monster-hp-bar')!;
   const monsterHpNums = document.getElementById('monster-hp-nums')!;
@@ -352,6 +400,12 @@ async function boot(): Promise<void> {
       const action = (b as HTMLElement).dataset.action as 'attack' | 'defend' | 'flee';
       game.doCombatAction(action).catch((err) => console.error(err));
     });
+  });
+
+
+
+  (document.getElementById('event-btn') as HTMLButtonElement).addEventListener('click', () => {
+    game.chooseEvent();
   });
 
   const endHubBtn = document.getElementById('end-hub-btn') as HTMLButtonElement;
@@ -373,6 +427,11 @@ async function boot(): Promise<void> {
   document.body.appendChild(dmgLayer);
   const dmg = new DamageNumbers(dmgLayer, rig.camera);
   const cam = new CameraRig(rig.camera, canvas);
+
+  // Tandai tile dengan index untuk raycast klik.
+  board.tiles.forEach((t, i) => {
+    (t.mesh as unknown as { userData: { tileIndex: number } }).userData.tileIndex = i;
+  });
 
   const game = new Game(dice, board, {
     onState: updateUI,

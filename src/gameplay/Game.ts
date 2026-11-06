@@ -36,6 +36,10 @@ export class Game {
   readonly fx: GameFX;
   busy = false;
   lastRoll = 1;
+  pendingDice = 0;
+  choosing = false;
+  private choiceResolver: ((steps: number) => void) | null = null;
+  private eventResolver: (() => void) | null = null;
 
   constructor(dice: DiceManager, board: Board, events: GameEvents, fx: GameFX) {
     this.dice = dice;
@@ -141,12 +145,78 @@ export class Game {
       const diceValue = await this.dice.roll(this.die);
       this.lastRoll = diceValue;
       const rolled = this.run.applyCardRoll(diceValue);
-      this.events.onCombat('Lempar dadu: ' + rolled.value + (rolled.doubled ? ' (ganda!)' : ''));
-      await this.movePiece(rolled.value);
+      this.events.onCombat('Dadu ' + rolled.value + (rolled.doubled ? ' (ganda!)' : '') + '. Pilih langkah 1-' + rolled.value + '.');
+      // PEMAIN MEMILIH langkah (agency) — bukan jalan otomatis.
+      const steps = await this.waitForStepChoice(rolled.value);
+      await this.movePiece(steps);
       await this.resolveTile();
     }
     this.busy = false;
     this.events.onState();
+  }
+
+  /** Peristiwa pilihan: hasil bergantung pilihan risiko pemain. */
+  resolveEvent(): Promise<void> {
+    const st = this.run.state;
+    this.events.onCombat('Peristiwa! Pilih tindakanmu.');
+    this.toastAt('Peristiwa terdeteksi. Klik tombol untuk menilai risiko.', 'info');
+    this.events.onState();
+    return new Promise((resolve) => {
+      this.eventResolver = () => {
+        this.eventResolver = null;
+        const res = this.run.resolveChoiceEvent(Math.random);
+        const kind = res.kind;
+        this.toastAt(res.text, kind === 'curse' || kind === 'blood' ? 'warning' : 'success');
+        this.events.onCombat(res.text);
+        if (res.gold > 0) {
+          const p = this.tileWorld(st.position).setY(0.6);
+          this.fx.particles.burst(p, { count: 26, color: '#ffb000', speed: 3, up: 3 });
+          this.fx.dmg.spawn(p, res.gold, 'gold');
+          audio.coin();
+        }
+        if (res.hp > 0) {
+          const p = this.tileWorld(st.position).setY(0.6);
+          this.fx.particles.burst(p, { count: 22, color: '#7ddc3f', speed: 2.5, up: 2.5 });
+          this.fx.dmg.spawn(p, res.hp, 'heal');
+        }
+        if (res.hp < 0) {
+          audio.hurt();
+          this.fx.cam.addTrauma(0.35);
+          this.toastAt('Peristiwa berdampak -' + Math.abs(res.hp) + ' HP.', 'error');
+        }
+        st.status = 'idle';
+        resolve();
+      };
+    });
+  }
+
+  /** Dipanggil tombol UI saat peristiwa. */
+  chooseEvent(): void {
+    if (this.eventResolver) this.eventResolver();
+  }
+
+  /** Tunggu pemain memilih langkah 1..maxSteps dengan klik petak. */
+  private waitForStepChoice(maxSteps: number): Promise<number> {
+    this.pendingDice = maxSteps;
+    this.choosing = true;
+    this.events.onState();
+    return new Promise((resolve) => {
+      this.choiceResolver = (steps: number) => {
+        this.choiceResolver = null;
+        this.choosing = false;
+        this.pendingDice = 0;
+        resolve(steps);
+      };
+    });
+  }
+
+  /** Dipanggil saat pemain klik petak dalam mode pilih. */
+  chooseTile(targetIndex: number): void {
+    if (!this.choosing || !this.choiceResolver) return;
+    const st = this.run.state;
+    const steps = targetIndex - st.position;
+    if (steps < 1 || steps > this.pendingDice) return;
+    this.choiceResolver(steps);
   }
 
   private movePiece(steps: number): Promise<void> {
@@ -177,6 +247,9 @@ export class Game {
       case 'elite':
       case 'boss':
         this.enterCombat(tile.type as 'monster' | 'elite' | 'boss');
+        return;
+      case 'event':
+        await this.resolveEvent();
         return;
       case 'treasure': {
         const res = this.run.resolveTreasure(Math.random);

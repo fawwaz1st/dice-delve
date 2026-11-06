@@ -343,6 +343,39 @@ intent: 'normal',
 
   /* ---- Petak non-combat ---- */
 
+  /** Peristiwa risiko/hadiah: hasil bergantung pilihan risiko pemain. */
+  resolveChoiceEvent(rng: () => number): { kind: 'blessing' | 'curse' | 'jackpot' | 'blood' | 'wisdom'; text: string; hp: number; gold: number; card?: CardId } {
+    const r01 = rng();
+    if (r01 < 0.30) {
+      this.heal(8);
+      return { kind: 'blessing', text: 'Berkah: +8 HP', hp: 8, gold: 0 };
+    }
+    if (r01 < 0.55) {
+      const dmg = 5 + Math.floor(rng() * 5);
+      this.state.hp = Math.max(0, this.state.hp - dmg);
+      return { kind: 'curse', text: 'Kutuk: -' + dmg + ' HP', hp: -dmg, gold: 0 };
+    }
+    if (r01 < 0.80) {
+      const gold = Math.round((25 + Math.floor(rng() * 30)) * (this.state.goldMul ?? 1) * this.cardGoldMul());
+      this.state.gold += gold;
+      return { kind: 'jackpot', text: 'Jackpot: +' + gold + ' emas', hp: 0, gold };
+    }
+    if (r01 < 0.92) {
+      const card = rollCard(rng);
+      this.state.cards.push(card);
+      return { kind: 'wisdom', text: 'Wisaya: kartu ' + CARDS[card].name, hp: 0, gold: 0, card };
+    }
+    const cost = Math.min(this.state.hp - 1, 4);
+    if (cost > 0) {
+      this.state.hp -= cost;
+      const gold = Math.round(35 * (this.state.goldMul ?? 1) * this.cardGoldMul());
+      this.state.gold += gold;
+      return { kind: 'blood', text: 'Darah ditukar emas: -' + cost + ' HP, +' + gold + ' emas', hp: -cost, gold };
+    }
+    this.heal(4);
+    return { kind: 'blessing', text: 'Berkah kecil: +4 HP', hp: 4, gold: 0 };
+  }
+
   resolveTreasure(rng: () => number): { gold: number; card?: CardId } {
     const gold = Math.round((10 + Math.floor(rng() * 20)) * (this.state.goldMul ?? 1) * this.cardGoldMul());
     this.state.gold += gold;

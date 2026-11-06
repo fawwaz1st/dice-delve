@@ -1,7 +1,7 @@
 import { Group, Mesh, BoxGeometry, SphereGeometry, MeshStandardMaterial, Color, Vector3 } from 'three/webgpu';
 import { toonMaterial } from '../render/Materials.js';
 
-export type TileType = 'start' | 'monster' | 'elite' | 'treasure' | 'trap' | 'shop' | 'rest' | 'boss';
+export type TileType = 'start' | 'monster' | 'elite' | 'treasure' | 'trap' | 'shop' | 'rest' | 'boss' | 'event';
 
 export interface Tile {
   index: number;
@@ -41,6 +41,7 @@ const TILE_STYLE: Record<TileType, { color: string; emissive?: string; emissiveI
   shop: { color: '#2a3340', emissive: '#6f8cff', emissiveIntensity: 0.15 },
   rest: { color: '#243028', emissive: '#7ddc3f', emissiveIntensity: 0.15 },
   boss: { color: '#401a1a', emissive: '#ff3b5c', emissiveIntensity: 0.35 },
+  event: { color: '#3a2330', emissive: '#ffde59', emissiveIntensity: 0.3 },
 };
 
 const TILE_SIZE = 1.9;
@@ -65,7 +66,10 @@ export function todaySeed(): number {
  * Hasilkan jalur papan via DFS dengan backtracking: dijamin panjang target
  * selama masih ada ruang (tidak buntu di tengah).
  */
-export function generateTiles(seed: number, length = 34): Array<{ gx: number; gz: number; type: TileType }> {
+export function generateTiles(seed: number, length = 34, themeId: ThemeId = 'forest'): Array<{ gx: number; gz: number; type: TileType }> {
+  // Panjang dan densitas berbeda per tema (Hutan santai, Gua padat, Gunung brutal).
+  const themeLen = themeId === 'forest' ? 42 : themeId === 'cave' ? 36 : 28;
+  const targetLen = length !== 34 ? length : themeLen;
   const rng = makeRng(seed);
   const DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1]] as const;
 
@@ -88,7 +92,7 @@ export function generateTiles(seed: number, length = 34): Array<{ gx: number; gz
     const walk = (x: number, z: number): boolean => {
       path.push({ gx: x, gz: z, type: 'monster' });
       occupied.add(key(x, z));
-      if (path.length >= length) return true;
+      if (path.length >= targetLen) return true;
       const options: Array<readonly [number, number]> = shuffle(
         DIRS.filter(([dx, dz]) => {
           const nx = x + dx;
@@ -105,19 +109,20 @@ export function generateTiles(seed: number, length = 34): Array<{ gx: number; gz
     };
 
     if (walk(0, 0)) {
-      return assignTypes(path, rng);
+      return assignTypes(path, rng, themeId);
     }
   }
 
   // Cadangan: jalur zig-zag penuh (jarang tercapai).
-  return zigzag(length);
+  return zigzag(targetLen);
 }
 
-function assignTypes(path: Array<{ gx: number; gz: number; type: TileType }>, rng: () => number): Array<{ gx: number; gz: number; type: TileType }> {
-  const weights: Array<[TileType, number]> = [
-    ['monster', 0.34], ['treasure', 0.18], ['trap', 0.12],
-    ['shop', 0.08], ['rest', 0.08], ['elite', 0.08],
-  ];
+function assignTypes(path: Array<{ gx: number; gz: number; type: TileType }>, rng: () => number, themeId: ThemeId = 'forest'): Array<{ gx: number; gz: number; type: TileType }> {
+  const weights: Array<[TileType, number]> = themeId === 'forest'
+    ? [['monster', 0.26], ['treasure', 0.20], ['trap', 0.08], ['shop', 0.13], ['rest', 0.13], ['elite', 0.06], ['event', 0.06]]
+    : themeId === 'cave'
+    ? [['monster', 0.38], ['treasure', 0.13], ['trap', 0.12], ['shop', 0.07], ['rest', 0.07], ['elite', 0.11], ['event', 0.06]]
+    : [['monster', 0.33], ['treasure', 0.11], ['trap', 0.20], ['shop', 0.05], ['rest', 0.05], ['elite', 0.13], ['event', 0.06]];
   const pickType = (): TileType => {
     let r = rng();
     for (const [type, w] of weights) {
@@ -165,7 +170,7 @@ export class Board {
 
   constructor(seed: number, themeId: ThemeId = 'forest') {
     this.theme = THEMES[themeId];
-    const layout = generateTiles(seed);
+    const layout = generateTiles(seed, 34, themeId);
     layout.forEach((t, index) => {
       const style = TILE_STYLE[t.type];
       const opts: { emissive?: string; emissiveIntensity?: number } = { emissiveIntensity: (style.emissiveIntensity ?? 0.15) * this.theme.emissiveScale };
