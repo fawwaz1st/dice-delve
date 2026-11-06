@@ -248,10 +248,16 @@ intent: 'normal',
     // Tentukan serangan monster ronde ini berdasar perilaku (telegraphable).
     const frac = m.hp / m.maxHp;
     m.phase = frac > 0.66 ? 1 : frac > 0.33 ? 2 : 3;
-    m.intent = m.phase === 3 && m.behavior === 'aggressive' ? 'enrage'
-      : m.behavior === 'aggressive' ? (m.rounds % 3 === 0 ? 'heavy' : 'normal')
-      : m.behavior === 'guardian' ? (m.rounds % 3 === 0 ? 'shield' : 'normal')
-      : (m.rounds % 3 === 0 ? 'dodge' : 'normal');
+    // Pola intent BEDA per kepribadian (bukan jam dinding %3).
+    if (m.phase === 3) {
+      m.intent = m.behavior === 'aggressive' ? 'enrage' : m.behavior === 'guardian' ? 'shield' : 'dodge';
+    } else if (m.behavior === 'aggressive') {
+      m.intent = (m.rounds === 2 || m.rounds === 4) ? 'heavy' : 'normal';
+    } else if (m.behavior === 'guardian') {
+      m.intent = (m.rounds % 2 === 0) ? 'shield' : 'normal';
+    } else {
+      m.intent = (m.rounds % 3 === 2) ? 'dodge' : (m.rounds % 3 === 0 ? 'heavy' : 'normal');
+    }
 
     // Kabur: lempar koin untuk mundur 1 petak; gagal = serangan penuh.
     if (action === 'flee') {
@@ -267,7 +273,10 @@ intent: 'normal',
     const bonus = this.diceBonus() + (this.state.bonusDamage ?? 0);
     // Licik menghindari lagi saat bertahan juga tidak terlalu kuat.
     const dodged = m.behavior === 'sly' && Math.random() < 0.2;
-    let dealtBase = dodged ? 0 : (value + bonus >= m.def ? value + bonus : 0);
+    // Damage non-biner: selalu ada dampak, varians ±20%.
+    const variance = 0.8 + Math.random() * 0.4;
+    let dealtBase = dodged ? 0 : Math.max(1, Math.round((value + bonus - m.def) * variance));
+    if (value + bonus < m.def) dealtBase = Math.max(1, Math.round(dealtBase * 0.5));
     // Bertahan: damage setengah (aman tapi lambat).
     const dealt = action === 'defend' ? Math.floor(dealtBase / 2) : dealtBase;
     m.hp = Math.max(0, m.hp - dealt);
@@ -410,12 +419,30 @@ intent: 'normal',
     return dmg;
   }
 
-  resolveShop(rng: () => number): CardId | null {
-    // Belanja sederhana: kartu termurah yang belum dimiliki.
+  /** Toko: tawarkan 3 kartu (berharga) + opsi Lewati. */
+  shopOffers(rng: () => number): CardId[] {
     const owned = new Set<CardId>(this.state.cards);
     const pool = (Object.keys(CARDS) as CardId[]).filter((id) => !owned.has(id));
-    if (pool.length === 0 || this.state.gold < 25) return null;
-    const pick = pool[Math.floor(rng() * pool.length)]!;
+    const offers: CardId[] = [];
+    for (let i = 0; i < 3 && pool.length > 0; i += 1) {
+      const idx = Math.floor(rng() * pool.length);
+      offers.push(pool.splice(idx, 1)[0]!);
+    }
+    return offers;
+  }
+
+  buyOffer(id: CardId): boolean {
+    if (this.state.gold < 25) return false;
+    this.state.gold -= 25;
+    this.state.cards.push(id);
+    return true;
+  }
+
+  resolveShop(rng: () => number): CardId | null {
+    // Kompatibilitas: beli kartu acak bila dipanggil lama.
+    const offers = this.shopOffers(rng);
+    if (offers.length === 0 || this.state.gold < 25) return null;
+    const pick = offers[0]!;
     this.state.gold -= 25;
     this.state.cards.push(pick);
     return pick;

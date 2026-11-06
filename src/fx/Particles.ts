@@ -1,4 +1,4 @@
-import { Points, BufferGeometry, PointsMaterial, BufferAttribute, AdditiveBlending, Vector3, Color } from 'three/webgpu';
+import { Points, BufferGeometry, PointsMaterial, BufferAttribute, AdditiveBlending, Vector3, Color, CanvasTexture } from 'three/webgpu';
 
 /**
  * Sistem partikel ringan: satu Points dengan pool, burst berwarna.
@@ -30,15 +30,27 @@ export class Particles {
     this.geo = new BufferGeometry();
     this.geo.setAttribute('position', new BufferAttribute(this.positions, 3));
     this.geo.setAttribute('color', new BufferAttribute(this.colors, 3));
-    const mat = new PointsMaterial({
-      size: 0.16,
-      vertexColors: true,
-      transparent: true,
-      opacity: 0.95,
-      blending: AdditiveBlending,
-      depthWrite: false,
-      sizeAttenuation: true,
-    });
+      // Tekstur radial lembut (bukan titik kotak).
+      const sprite = document.createElement('canvas');
+      sprite.width = 32;
+      sprite.height = 32;
+      const ctx = sprite.getContext('2d')!;
+      const grad = ctx.createRadialGradient(16, 16, 0, 16, 16, 16);
+      grad.addColorStop(0, 'rgba(255,255,255,1)');
+      grad.addColorStop(0.4, 'rgba(255,255,255,0.8)');
+      grad.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, 32, 32);
+      const mat = new PointsMaterial({
+        size: 0.28,
+        vertexColors: true,
+        transparent: true,
+        opacity: 0.95,
+        blending: AdditiveBlending,
+        depthWrite: false,
+        sizeAttenuation: true,
+        map: new CanvasTexture(sprite),
+      });
     this.points = new Points(this.geo, mat);
     this.points.frustumCulled = false;
     for (let i = 0; i < MAX; i += 1) {

@@ -40,6 +40,9 @@ export class Game {
   choosing = false;
   private choiceResolver: ((steps: number) => void) | null = null;
   private eventResolver: ((choice: 'safe' | 'risky') => void) | null = null;
+  private shopResolver: ((choice: 'skip' | CardId) => void) | null = null;
+  shopOffers: CardId[] = [];
+  private restResolver: ((choice: 'heal' | 'maxhp') => void) | null = null;
 
   constructor(dice: DiceManager, board: Board, events: GameEvents, fx: GameFX) {
     this.dice = dice;
@@ -169,6 +172,57 @@ export class Game {
     this.events.onState();
   }
 
+  /** Toko interaktif: 3 kartu + Lewati. */
+  resolveShopInteractive(): Promise<void> {
+    this.shopOffers = this.run.shopOffers(Math.random);
+    this.events.onCombat('Toko: pilih kartu (25 emas) atau Lewati.');
+    this.events.onState();
+    return new Promise((resolve) => {
+      this.shopResolver = (choice: 'skip' | CardId) => {
+        this.shopResolver = null;
+        const st = this.run.state;
+        if (choice !== 'skip' && this.run.buyOffer(choice)) {
+          audio.coin();
+          this.toastAt('Membeli ' + CARDS[choice].name + '.', 'success');
+        } else {
+          this.toastAt('Melewati toko.', 'info');
+        }
+        st.status = 'idle';
+        resolve();
+      };
+    });
+  }
+
+  chooseShop(choice: 'skip' | CardId): void {
+    if (this.shopResolver) this.shopResolver(choice);
+  }
+
+  /** Istirahat interaktif: +8 HP atau naik maks HP +2. */
+  resolveRestInteractive(): Promise<void> {
+    this.events.onCombat('Istirahat: pilih pemulihan.');
+    this.events.onState();
+    return new Promise((resolve) => {
+      this.restResolver = (choice: 'heal' | 'maxhp') => {
+        this.restResolver = null;
+        const st = this.run.state;
+        if (choice === 'heal') {
+          this.run.heal(8);
+          this.toastAt('Istirahat: +8 HP.', 'success');
+        } else {
+          st.maxHp += 2;
+          this.run.heal(2);
+          this.toastAt('Peningkatan: maks HP +2.', 'success');
+        }
+        st.status = 'idle';
+        resolve();
+      };
+    });
+  }
+
+  chooseRest(choice: 'heal' | 'maxhp'): void {
+    if (this.restResolver) this.restResolver(choice);
+  }
+
   /** Peristiwa pilihan: hasil bergantung pilihan risiko pemain. */
   resolveEvent(): Promise<void> {
     const st = this.run.state;
@@ -292,22 +346,12 @@ export class Game {
         this.toastAt('Jebakan! Kamu menerima ' + dmg + ' damage.', 'error');
         break;
       }
-      case 'shop': {
-        const card = this.run.resolveShop(Math.random);
-        if (card) audio.card();
-        this.toastAt(card ? 'Membeli ' + CARDS[card].name + ' (25 emas).' : 'Tidak ada yang bisa dibeli (butuh 25 emas).', card ? 'info' : 'warning');
-        break;
-      }
-      case 'rest': {
-        const before = st.hp;
-        this.run.heal(8);
-        const healed = st.hp - before;
-        const rp = this.tileWorld(st.position).setY(0.6);
-        this.fx.particles.burst(rp, { count: 20, color: '#7ddc3f', speed: 1.5, up: 2.5, life: 1.1, gravity: 0.5 });
-        if (healed > 0) this.fx.dmg.spawn(rp, healed, 'heal');
-        this.toastAt('Istirahat: +8 HP.', 'success');
-        break;
-      }
+      case 'shop':
+        await this.resolveShopInteractive();
+        return;
+      case 'rest':
+        await this.resolveRestInteractive();
+        return;
       case 'start':
         break;
     }
@@ -360,7 +404,10 @@ export class Game {
     st.status = 'combat';
     const here = this.tileWorld(st.position).clone();
     this.tomb.visible = true;
-    this.tomb.position.set(here.x + 1.6, 0, here.z);
+    // Monster di sisi berseberangan dengan arah kamera (bukan selalu timur).
+    const camDir = this.fx.cam.camera.position.clone().sub(here).setY(0).normalize();
+    const side = new Vector3(-camDir.z, 0, camDir.x);
+    this.tomb.position.copy(here.clone().add(side.multiplyScalar(2.2)));
     this.tomb.rotation.y = -Math.PI / 2;
     this.fx.cam.setFocus(0.62);
     this.fx.cam.follow(here.clone().lerp(new Vector3(here.x + 1.6, 0, here.z), 0.5));
@@ -484,13 +531,38 @@ export class Game {
     (target as unknown as { updateProjectionMatrix?: () => void }).updateProjectionMatrix?.();
   }
 
+  /** Animasi monster per frame (dipanggil loop). */
+  update(dt: number): void {
+    this.updateMonster(dt);
+  }
+
   private flashMonster(): void {
     const tomb = this.tomb;
+    const baseScale = this.tombBaseScale;
     tween({ duration: 220, ease: Ease.outCubic, onUpdate: (t) => {
-      const s = 1 + Math.sin(t * Math.PI) * 0.18;
+      const s = baseScale * (1 + Math.sin(t * Math.PI) * 0.18);
       tomb.scale.set(s, s, s);
-    }, onDone: () => tomb.scale.set(1, 1, 1) });
+    }, onDone: () => tomb.scale.set(baseScale, baseScale, baseScale) });
   }
+
+  /** Monster bergerak: idle bob + lunge ke pion saat menyerang. */
+  private updateMonster(dt: number): void {
+    const st = this.run.state;
+    if (!this.tomb.visible || !st.monster) return;
+    const t = performance.now() * 0.001;
+    // idle bob halus
+    this.tomb.position.y = Math.sin(t * 2.2) * 0.08;
+    // lunge saat menyerang (berdasar intent)
+    const target = this.tombBasePos.clone();
+    if (st.monster.intent === 'heavy' || st.monster.intent === 'enrage') {
+      const dir = this.piece.group.position.clone().sub(this.tomb.position).setY(0).normalize().multiplyScalar(0.45);
+      target.add(dir);
+    }
+    this.tomb.position.lerp(target, Math.min(1, dt * 6));
+  }
+
+  private readonly tombBaseScale = 1;
+  private readonly tombBasePos = new Vector3();
 
   private shakePiece(): void {
     // Offset dari posisi dasar (tidak akumulasi permanen/drift).

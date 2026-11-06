@@ -53,7 +53,12 @@ export class CameraRig {
 
   /** Target kamera (posisi pion). */
   follow(world: Vector3): void {
-    this.target.set(world.x * 0.6, 0.6, world.z * 0.6);
+    // Padding: pion tak pernah di 10% luar tepi.
+    this.target.set(
+      Math.max(-7, Math.min(7, world.x * 0.6)),
+      0.6,
+      Math.max(-7, Math.min(7, world.z * 0.6)),
+    );
   }
 
   /** Perbesar dekat saat combat (1 = normal, 0.6 = dekat). */

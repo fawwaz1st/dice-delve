@@ -36,10 +36,14 @@ export function toonMaterial(
   color: string,
   opts: { emissive?: string; emissiveIntensity?: number } = {},
 ): MeshStandardMaterial {
+  // Cel-shaded: flat shading + ramp toon di lightMap (toon sesungguhnya, terang).
   const mat = new MeshStandardMaterial({
     color: new Color(color),
     roughness: 0.85,
     metalness: 0.0,
+    flatShading: true,
+    lightMap: getToonGradient(),
+    lightMapIntensity: 0.55,
   });
   if (opts.emissive) {
     mat.emissive = new Color(opts.emissive);

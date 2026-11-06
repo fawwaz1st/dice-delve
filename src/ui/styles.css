@@ -640,3 +640,50 @@ html, body {
   background: linear-gradient(90deg, #7ddc3f, #4fae2a);
   z-index: 1;
 }
+
+.shopchoices, .restchoices {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: 210px;
+  z-index: 11;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: center;
+  max-width: 92vw;
+}
+.shopchoices[hidden], .restchoices[hidden] { display: none; }
+
+/* Vignette halus (post-processing ringan) */
+.vignette {
+  position: fixed;
+  inset: 0;
+  z-index: 5;
+  pointer-events: none;
+  background: radial-gradient(ellipse at center, transparent 55%, rgba(0, 0, 0, 0.35) 100%);
+}
+@media (prefers-reduced-motion: reduce) {
+  .vignette { opacity: 0.5; }
+}
+
+/* Mode sentuh: HUD adaptif */
+body.touch-mode .log {
+  bottom: auto;
+  top: 76px;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: 90vw;
+  max-height: 90px;
+}
+body.touch-mode .skillbar {
+  bottom: auto;
+  top: 176px;
+  left: auto;
+  right: 12px;
+  transform: none;
+  flex-direction: column;
+}
+body.touch-mode .combatpanel {
+  bottom: 130px;
+}

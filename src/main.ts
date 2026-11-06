@@ -76,6 +76,11 @@ async function boot(): Promise<void> {
         <button class="btn btn--mini" data-event="safe" type="button">Aman</button>
         <button class="btn btn--mini btn--ghost" data-event="risky" type="button">Berisiko</button>
       </div>
+      <div class="shopchoices" id="shop-choices" hidden></div>
+      <div class="restchoices" id="rest-choices" hidden>
+        <button class="btn btn--mini" data-rest="heal" type="button">+8 HP</button>
+        <button class="btn btn--mini btn--ghost" data-rest="maxhp" type="button">Maks HP +2</button>
+      </div>
     </div>
     <div class="log" id="combat-log"></div>
     <div class="toast-stack" id="toast-stack" aria-live="polite"></div>
@@ -289,6 +294,30 @@ async function boot(): Promise<void> {
       }
       const eventPending = !!(game as unknown as { eventResolver: unknown }).eventResolver;
       (document.getElementById('event-choices') as HTMLElement).hidden = !eventPending;
+      const shopPending = !!(game as unknown as { shopResolver: unknown }).shopResolver;
+      const shopBox = document.getElementById('shop-choices') as HTMLElement;
+      shopBox.hidden = !shopPending;
+      if (shopPending) {
+        const offers = (game as unknown as { shopOffers: CardId[] }).shopOffers;
+        shopBox.replaceChildren();
+        offers.forEach((id) => {
+          const def = CARDS[id];
+          const b = document.createElement('button');
+          b.className = 'btn btn--mini';
+          b.type = 'button';
+          b.dataset.shop = id;
+          b.textContent = def.name + ' · 25 emas';
+          shopBox.appendChild(b);
+        });
+        const skip = document.createElement('button');
+        skip.className = 'btn btn--mini btn--ghost';
+        skip.type = 'button';
+        skip.dataset.shop = 'skip';
+        skip.textContent = 'Lewati';
+        shopBox.appendChild(skip);
+      }
+      const restPending = !!(game as unknown as { restResolver: unknown }).restResolver;
+      (document.getElementById('rest-choices') as HTMLElement).hidden = !restPending;
       // Panel combat: HP bar + tombol aksi.
       const inCombat = s.status === 'combat' && s.monster;
       combatPanel.hidden = !inCombat;
@@ -430,6 +459,18 @@ async function boot(): Promise<void> {
       game.chooseEvent(choice);
     });
   });
+  document.getElementById('shop-choices')!.addEventListener('click', (e) => {
+    const b = (e.target as HTMLElement).closest('[data-shop]') as HTMLElement | null;
+    if (!b) return;
+    const choice = b.dataset.shop as CardId | 'skip';
+    game.chooseShop(choice);
+  });
+  document.querySelectorAll('#rest-choices [data-rest]').forEach((b) => {
+    b.addEventListener('click', () => {
+      const choice = (b as HTMLElement).dataset.rest as 'heal' | 'maxhp';
+      game.chooseRest(choice);
+    });
+  });
 
   window.addEventListener('keydown', (e) => {
     if (game.choosing && /^[1-6]$/.test(e.key)) {
@@ -567,6 +608,7 @@ async function boot(): Promise<void> {
       particles.update(dt * cam.slowmoScale);
       dmg.update(dt);
       cam.update(dt);
+      game.update(dt);
       renderer.render(rig.scene, rig.camera);
     },
   );
@@ -574,6 +616,12 @@ async function boot(): Promise<void> {
 
   // Sembunyikan loader.
   const loader = document.getElementById('loader')!;
+  // Vignette halus (post ringan berbasis CSS, aman untuk WebGPU fallback).
+  const vignette = document.createElement('div');
+  vignette.className = 'vignette';
+  document.body.appendChild(vignette);
+  // Mode sentuh: HUD menyesuaikan.
+  if (platform.isTouch || platform.isCoarse) document.body.classList.add('touch-mode');
   loader.style.opacity = '0';
   setTimeout(() => { loader.hidden = true; }, 420);
 
