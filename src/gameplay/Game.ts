@@ -70,6 +70,7 @@ export class Game {
   start(bonuses?: { maxHp: number; damage: number; diceBonus: number; goldMultiplier: number }): void {
     this.run.start(todaySeed());
     if (bonuses) this.run.applyMetaBonuses(bonuses.maxHp, bonuses.damage, bonuses.diceBonus, bonuses.goldMultiplier);
+    this.dice.setSeed(this.run.state.seed);
     this.piece.place(this.tileWorld(0));
     const near = this.tileWorld(0).clone();
     near.x += 2.2;
@@ -268,6 +269,8 @@ export class Game {
     this.tomb.rotation.y = -Math.PI / 2;
     this.fx.cam.setFocus(0.62);
     this.fx.cam.follow(here.clone().lerp(new Vector3(here.x + 1.6, 0, here.z), 0.5));
+    this.fx.cam.setSlowmo(0.6);
+    window.setTimeout(() => this.fx.cam.setSlowmo(1), 600);
     this.fx.particles.motes(new Vector3(here.x + 1.6, 0.8, here.z), 10);
     audio.setIntensity(2);
     const pers = m.behavior === 'aggressive' ? 'Agresif' : m.behavior === 'guardian' ? 'Penjaga' : 'Licik';
@@ -336,6 +339,10 @@ export class Game {
   private async checkCombatEnd(): Promise<void> {
     const st = this.run.state;
     const m = st.monster;
+    // Slow-mo saat critical (HP monster kritis) atau menang.
+    const critical = m && m.hp <= m.maxHp * 0.25;
+    this.fx.cam.setSlowmo(critical ? 0.35 : 1);
+    if (critical) window.setTimeout(() => this.fx.cam.setSlowmo(1), 800);
     if (m && m.hp <= 0 && st.hp > 0) {
       const tier = (this.run.currentTile()?.type as 'monster' | 'elite' | 'boss') ?? 'monster';
       this.run.onMonsterDefeated(tier);
@@ -370,8 +377,16 @@ export class Game {
   }
 
   private shakePiece(): void {
+    // Offset dari posisi dasar (tidak akumulasi permanen/drift).
+    const base = this.piece.group.position.clone();
     tween({ duration: 260, ease: Ease.outQuart, onUpdate: (t) => {
-      this.piece.group.position.x += (Math.random() - 0.5) * 0.06 * (1 - t);
+      this.piece.group.position.set(
+        base.x + (Math.random() - 0.5) * 0.06 * (1 - t),
+        base.y,
+        base.z,
+      );
+    }, onDone: () => {
+      this.piece.group.position.copy(base);
     } });
   }
 

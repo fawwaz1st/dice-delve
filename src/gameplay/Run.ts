@@ -4,7 +4,7 @@ import { CARDS, rollCard, type CardId } from './Cards.js';
 export type Monster_behavior = 'aggressive' | 'guardian' | 'sly';
 export interface MonsterBehavior { name: string; hpBonus: number; atkBonus: number; defBonus: number; dodge: number; }
 
-export type MonsterIntent = 'normal' | 'heavy' | 'shield' | 'dodge';
+export type MonsterIntent = 'normal' | 'heavy' | 'shield' | 'dodge' | 'enrage';
 export interface MonsterState {
   name: string;
   hp: number;
@@ -14,7 +14,8 @@ export interface MonsterState {
   behavior: Monster_behavior;
   intent: MonsterIntent;
   /** Ronde sejak spawn (untuk pola). */
-  rounds: number;
+rounds: number;
+  phase: 1 | 2 | 3;
 }
 
 export interface RunState {
@@ -233,7 +234,8 @@ export class Run {
       atk: Math.max(1, atkBase + b.atkBonus),
       def: Math.max(0, (tier === 'boss' ? 4 : tier === 'elite' ? 2 : 0) + b.defBonus),
       behavior,
-      intent: 'normal',
+intent: 'normal',
+      phase: 1,
       rounds: 0,
     };
   }
@@ -244,7 +246,10 @@ export class Run {
     if (!m) return { playerWins: false, playerDamage: 0, monsterDamage: 0, them: 'tidak ada', fled: false };
     m.rounds += 1;
     // Tentukan serangan monster ronde ini berdasar perilaku (telegraphable).
-    m.intent = m.behavior === 'aggressive' ? (m.rounds % 3 === 0 ? 'heavy' : 'normal')
+    const frac = m.hp / m.maxHp;
+    m.phase = frac > 0.66 ? 1 : frac > 0.33 ? 2 : 3;
+    m.intent = m.phase === 3 && m.behavior === 'aggressive' ? 'enrage'
+      : m.behavior === 'aggressive' ? (m.rounds % 3 === 0 ? 'heavy' : 'normal')
       : m.behavior === 'guardian' ? (m.rounds % 3 === 0 ? 'shield' : 'normal')
       : (m.rounds % 3 === 0 ? 'dodge' : 'normal');
 
@@ -279,6 +284,7 @@ export class Run {
       } else {
         taken = Math.max(0, m.atk - this.cardDamageReduction());
         if (m.intent === 'heavy') taken = Math.floor(taken * 1.6);
+        if (m.intent === 'enrage') taken = Math.floor(taken * 2.2);
         if (m.intent === 'shield') taken = Math.floor(taken * 0.3);
         if (action === 'defend') taken = Math.floor(taken / 2);
       }

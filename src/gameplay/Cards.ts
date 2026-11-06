@@ -10,8 +10,6 @@ export interface CardDef {
   modifyRoll?: (roll: number, ctx: { turn: number }) => number;
   /** Bonus damage saat combat. */
   damageBonus?: number;
-  /** HP pulih saat damage diterima. */
-  thorns?: number;
   /** HP pulih tiap giliran. */
   regen?: number;
   /** Peluang menggandakan hasil dadu. */
@@ -36,7 +34,7 @@ export const CARDS: Record<CardId, CardDef> = {
   },
   stone: {
     id: 'stone', name: 'Batu Karat', rarity: 'common', icon: 'shield',
-    desc: 'Kurangi 1 damage yang kamu terima.', thorns: 0,
+    desc: 'Kurangi 1 damage yang kamu terima.', damageReduction: 1,
   },
   feather: {
     id: 'feather', name: 'Bulu Angin', rarity: 'uncommon', icon: 'wind',

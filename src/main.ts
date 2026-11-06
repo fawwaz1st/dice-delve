@@ -3,7 +3,8 @@ import { Loop } from './core/Loop.js';
 import { detectPlatform } from './core/Platform.js';
 import { createScene } from './render/Scene.js';
 import { DiceManager } from './gameplay/Dice.js';
-import { Board, themeForFloor } from './gameplay/Board.js';
+import { Board, themeForFloor, type Theme } from './gameplay/Board.js';
+import { Color, Fog } from 'three/webgpu';
 import { Game } from './gameplay/Game.js';
 import { todaySeed } from './gameplay/Board.js';
 import './ui/styles.css';
@@ -14,6 +15,12 @@ import { CameraRig } from './fx/CameraRig.js';
 import { loadMeta, saveMeta, runBonuses, runRewards, buyUpgrade, upgradeLevel, canAfford, UPGRADES, type UpgradeId } from './meta/Meta.js';
 import { CARD_POOL, CARDS, type CardId } from './gameplay/Cards.js';
 import { icon } from './ui/icons.js';
+
+/** Terapkan tema lantai ke scene (background + fog). */
+function applyTheme(rig: ReturnType<typeof createScene>, theme: Theme): void {
+  rig.scene.background = new Color(theme.bg);
+  rig.scene.fog = new Fog(new Color(theme.bg), 16, 44);
+}
 
 async function boot(): Promise<void> {
   const platform = detectPlatform();
@@ -26,6 +33,7 @@ async function boot(): Promise<void> {
 
   // Papan prosedural dari seed hari ini.
   const board = new Board(todaySeed(), themeForFloor(1));
+  applyTheme(rig, board.theme);
   rig.root.add(board.group);
 
   const dice = new DiceManager();
@@ -191,6 +199,7 @@ async function boot(): Promise<void> {
             endPanel.hidden = true;
             const nb = game.nextFloor();
             rig.root.add(nb.group);
+            applyTheme(rig, nb.theme);
             updateUI();
           };
         } else {
@@ -219,8 +228,15 @@ async function boot(): Promise<void> {
       combatPanel.hidden = !inCombat;
       if (inCombat && s.monster) {
         monsterName.textContent = s.monster.name;
-        const intentMap: Record<string, string> = { normal: '', heavy: 'Serangan Berat!', shield: 'Perisai', dodge: 'Mengelak' };
-        (document.getElementById('monster-intent') as HTMLElement).textContent = intentMap[s.monster.intent] ?? '';
+        const intentMap: Record<string, { icon: string; text: string }> = {
+          normal: { icon: 'sword', text: '' },
+          heavy: { icon: 'flame', text: 'Serangan Berat' },
+          shield: { icon: 'shield', text: 'Perisai' },
+          dodge: { icon: 'wind', text: 'Mengelak' },
+        };
+        const intent = intentMap[s.monster.intent] ?? { icon: 'sword', text: '' };
+        (document.getElementById('monster-intent') as HTMLElement).innerHTML =
+          (intent.icon ? '<span class="intent__ico">' + icon(intent.icon as never) + '</span>' : '') + intent.text;
         const pct = Math.max(0, Math.min(100, (s.monster.hp / s.monster.maxHp) * 100));
         monsterHpBar.style.width = pct.toFixed(1) + '%';
         monsterHpNums.textContent = s.monster.hp + '/' + s.monster.maxHp;
@@ -448,7 +464,7 @@ async function boot(): Promise<void> {
       const now = performance.now();
       const dt = Math.min(0.05, (now - lastFrame) / 1000);
       lastFrame = now;
-      particles.update(dt);
+      particles.update(dt * cam.slowmoScale);
       dmg.update(dt);
       cam.update(dt);
       renderer.render(rig.scene, rig.camera);

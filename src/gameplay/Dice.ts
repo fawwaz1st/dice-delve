@@ -71,9 +71,24 @@ export interface Dice {
 export class DiceManager {
   private dice: Dice[] = [];
   private readonly size = 1.1;
+  private rngState = 1;
 
   async init(): Promise<void> {
     // Tanpa fisika eksternal: dadu dianimate via tween.
+  }
+
+  /** Set seed agar dadu konsisten dengan papan (klaim seed harian terpenuhi). */
+  setSeed(seed: number): void {
+    this.rngState = (seed >>> 0) || 1;
+  }
+
+  private next(): number {
+    let s = this.rngState;
+    s ^= s << 13; s >>>= 0;
+    s ^= s >>> 17;
+    s ^= s << 5; s >>>= 0;
+    this.rngState = s;
+    return s / 0xffffffff;
   }
 
   spawn(position: Vector3): Dice {
@@ -93,9 +108,9 @@ export class DiceManager {
     return dice;
   }
 
-  /** Lempar dadu: tentukan nilai, animasikan, selesaikan dengan janji. */
+  /** Lempar dadu: tentukan nilai (ter-seed), animasikan, selesaikan dengan janji. */
   roll(dice: Dice): Promise<number> {
-    const value = 1 + Math.floor(Math.random() * 6);
+    const value = 1 + Math.floor(this.next() * 6);
     dice.value = value;
     dice.rolling = true;
     const target = targetOrientation(value);

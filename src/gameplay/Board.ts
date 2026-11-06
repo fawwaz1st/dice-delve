@@ -127,8 +127,18 @@ function assignTypes(path: Array<{ gx: number; gz: number; type: TileType }>, rn
     return 'monster';
   };
   path[0]!.type = 'start';
-  for (let i = 1; i < path.length; i += 1) {
-    path[i]!.type = i === path.length - 1 ? 'boss' : pickType();
+  const n = path.length;
+  let prev: TileType = 'start';
+  for (let i = 1; i < n; i += 1) {
+    if (i === n - 1) { path[i]!.type = 'boss'; prev = 'boss'; continue; }
+    let type = pickType();
+    // Hindari jebakan beruntun: paksa monster/harta ganti.
+    if (type === 'trap' && prev === 'trap') type = 'monster';
+    // Rest di ~60% dan 80%, shop di ~40%.
+    if (i === Math.floor(n * 0.62) || i === Math.floor(n * 0.85)) type = 'rest';
+    if (i === Math.floor(n * 0.4) || i === Math.floor(n * 0.7)) type = 'shop';
+    path[i]!.type = type;
+    prev = type;
   }
   return path;
 }

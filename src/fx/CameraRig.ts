@@ -17,6 +17,10 @@ export class CameraRig {
   private azimuthTarget = 0;
   private userZoom = 1.0;
   private userZoomTarget = 1.0;
+  private slowmo = 1.0;
+  private slowmoTarget = 1.0;
+  private pitch = 0;
+  private pitchTarget = 0;
 
   constructor(camera: PerspectiveCamera, canvas?: HTMLCanvasElement) {
     this.camera = camera;
@@ -57,23 +61,41 @@ export class CameraRig {
     this.trauma = Math.min(1, this.trauma + amount);
   }
 
+  /** Slow-motion sinematik (1 = normal, <1 = lambat). */
+  setSlowmo(scale: number): void {
+    this.slowmoTarget = scale;
+  }
+
+  /** Faktor slow-mo aktif (1 = normal, <1 = lambat) untuk update di luar. */
+  get slowmoScale(): number {
+    return this.slowmo;
+  }
+
+  /** Elevasi orbit (radian dari horizontal). */
+  setPitch(value: number): void {
+    this.pitchTarget = value;
+  }
+
   update(dt: number): void {
     // Pelonggaran halus menuju target.
     this.currentLook.lerp(this.target, Math.min(1, dt * 3.5));
     this.focusDistance += (this.focusTarget - this.focusDistance) * Math.min(1, dt * 4);
 
-    // Azimuth + zoom pemakai (halus).
+    // Azimuth + zoom + pitch + slow-mo (halus).
     this.azimuth += (this.azimuthTarget - this.azimuth) * Math.min(1, dt * 6);
     this.userZoom += (this.userZoomTarget - this.userZoom) * Math.min(1, dt * 6);
+    this.pitch += (this.pitchTarget - this.pitch) * Math.min(1, dt * 6);
+    this.slowmo += (this.slowmoTarget - this.slowmo) * Math.min(1, dt * 4);
     const dist = Math.hypot(this.baseOffset.x, this.baseOffset.z) * this.focusDistance * this.userZoom;
     const baseY = this.baseOffset.y * this.focusDistance * (0.7 + 0.3 * this.userZoom);
     const az = this.azimuth;
+    const pitch = this.pitch;
     const desired = new Vector3(
-      this.currentLook.x + Math.sin(az) * dist,
-      this.currentLook.y + baseY,
-      this.currentLook.z + Math.cos(az) * dist,
+      this.currentLook.x + Math.sin(az) * dist * Math.cos(pitch),
+      this.currentLook.y + baseY + Math.sin(pitch) * dist * 0.4,
+      this.currentLook.z + Math.cos(az) * dist * Math.cos(pitch),
     );
-    this.camera.position.lerp(desired, Math.min(1, dt * 5));
+    this.camera.position.lerp(desired, Math.min(1, dt * 5 * this.slowmo));
 
     // Guncangan: trauma decays, offset Perlin-like.
     this.trauma = Math.max(0, this.trauma - dt * 1.6);

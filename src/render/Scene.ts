@@ -85,7 +85,7 @@ export function createScene(): SceneRig {
 
   // Dekorasi lingkungan: pohon kerucut, kristal, batu (low-poly stylized).
   const animated: Array<{ mesh: Mesh; base: number; speed: number; kind: 'crystal' | 'leaf' }> = [];
-  const decorGroup = addDecor(root);
+  const decorGroup = addDecor(root, 20261105);
   // Daftarkan kristal + daun untuk animasi idle.
   decorGroup.traverse((child) => {
     if (child instanceof Mesh) {
@@ -114,8 +114,8 @@ export function createScene(): SceneRig {
   return { scene, camera, root, update };
 }
 
-function addDecor(root: Group): Group {
-  const rand = rng(20261105);
+function addDecor(root: Group, seed: number): Group {
+  const rand = rng(seed);
   const decor = new Group();
   const trunkMat = toonMaterial('#5a3c24');
   const leafMat = toonMaterial('#3f6632', { emissive: '#5a8a3a', emissiveIntensity: 0.15 });
