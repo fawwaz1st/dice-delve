@@ -31,12 +31,16 @@ export class CameraRig {
   private bindInput(canvas: HTMLCanvasElement): void {
     let dragging = false;
     let lastX = 0;
-    canvas.addEventListener('pointerdown', (e) => { dragging = true; lastX = e.clientX; });
+    let moved = 0;
+    canvas.addEventListener('pointerdown', (e) => { dragging = true; moved = 0; lastX = e.clientX; });
     window.addEventListener('pointerup', () => { dragging = false; });
     window.addEventListener('pointermove', (e) => {
       if (!dragging) return;
       const dx = e.clientX - lastX;
       lastX = e.clientX;
+      moved += Math.abs(dx);
+      // Threshold 6px: klik-tanpa-drag = pilih petak, bukan putar kamera.
+      if (moved < 6) return;
       this.azimuthTarget += dx * 0.005;
     });
     canvas.addEventListener('wheel', (e) => {
@@ -49,7 +53,7 @@ export class CameraRig {
 
   /** Target kamera (posisi pion). */
   follow(world: Vector3): void {
-    this.target.set(world.x * 0.35, 0.6, world.z * 0.35);
+    this.target.set(world.x * 0.6, 0.6, world.z * 0.6);
   }
 
   /** Perbesar dekat saat combat (1 = normal, 0.6 = dekat). */

@@ -29,7 +29,7 @@ async function boot(): Promise<void> {
   document.getElementById('app')!.appendChild(canvas);
 
   const renderer = await Renderer.create(canvas, platform.tier);
-  const rig = createScene();
+  const rig = createScene('forest');
 
   // Papan prosedural dari seed hari ini.
   const board = new Board(todaySeed(), themeForFloor(1));
@@ -49,7 +49,7 @@ async function boot(): Promise<void> {
         <p class="hud__hint">Lempar dadu · jelajahi papan · kalahkan bos</p>
       </div>
       <div class="hud__stats">
-        <div class="readout"><div class="readout__value" id="hp">30</div><div class="readout__label">HP</div></div>
+        <div class="readout"><div class="hpbar" id="hpbar"><span class="hpbar__ghost" id="hp-ghost"></span><span id="hp-bar"></span></div><div class="readout__value" id="hp">30</div><div class="readout__label">HP</div></div>
         <div class="readout"><div class="readout__value" id="gold">0</div><div class="readout__label">Emas</div></div>
         <div class="readout"><div class="readout__value" id="floor">1</div><div class="readout__label">Lantai</div></div>
       </div>
@@ -195,8 +195,10 @@ async function boot(): Promise<void> {
   function clearTileHighlight(): void {
     for (const idx of lastHighlighted) {
       const t = boardRef().tiles[idx];
-      if (t && t.mesh.scale) t.mesh.scale.set(1, 1, 1);
-      if (t && t.mesh.scale) t.mesh.position.y = 0.24;
+      if (!t) continue;
+      const ud = t.mesh.userData as { baseScale?: number; baseY?: number };
+      t.mesh.scale.set(1, ud.baseScale ?? 1, 1);
+      t.mesh.position.y = ud.baseY ?? 0.13;
     }
     lastHighlighted.clear();
   }
@@ -265,6 +267,16 @@ async function boot(): Promise<void> {
       }
       // HUD selalu mencerminkan state terkini.
       el.hp.textContent = String(s.hp);
+      const hpPct = Math.max(0, Math.min(100, (s.hp / s.maxHp) * 100));
+      (document.getElementById('hp-bar') as HTMLElement).style.width = hpPct.toFixed(1) + '%';
+      // Ghost bar tertinggal saat damage (animasi via CSS transition).
+      const ghost = document.getElementById('hp-ghost') as HTMLElement;
+      ghost.style.transition = 'none';
+      ghost.style.width = hpPct.toFixed(1) + '%';
+      requestAnimationFrame(() => {
+        ghost.style.transition = 'width 0.45s ease 0.18s';
+        ghost.style.width = hpPct.toFixed(1) + '%';
+      });
       el.gold.textContent = String(s.gold);
       el.floor.textContent = String(s.floor);
       el.diceValue.textContent = String(game.lastRoll);
@@ -287,6 +299,7 @@ async function boot(): Promise<void> {
           heavy: { icon: 'flame', text: 'Serangan Berat' },
           shield: { icon: 'shield', text: 'Perisai' },
           dodge: { icon: 'wind', text: 'Mengelak' },
+          enrage: { icon: 'flame', text: 'ENRAGE!' },
         };
         const intent = intentMap[s.monster.intent] ?? { icon: 'sword', text: '' };
         (document.getElementById('monster-intent') as HTMLElement).innerHTML =
@@ -418,6 +431,21 @@ async function boot(): Promise<void> {
     });
   });
 
+  window.addEventListener('keydown', (e) => {
+    if (game.choosing && /^[1-6]$/.test(e.key)) {
+      const steps = Number(e.key);
+      if (steps >= 1 && steps <= game.pendingDice) {
+        game.chooseTile(game.run.state.position + steps);
+      }
+      return;
+    }
+    if (e.code === 'Space' && !game.busy) {
+      const roll = document.getElementById('roll-btn') as HTMLButtonElement;
+      if (!roll.disabled) game.rollTurn().catch((err) => console.error(err));
+      e.preventDefault();
+    }
+  });
+
   const endHubBtn = document.getElementById('end-hub-btn') as HTMLButtonElement;
   endHubBtn.addEventListener('click', () => {
     endRunToHub();
@@ -440,7 +468,10 @@ async function boot(): Promise<void> {
 
   // Tandai tile dengan index untuk raycast klik.
   board.tiles.forEach((t, i) => {
-    (t.mesh as unknown as { userData: { tileIndex: number } }).userData.tileIndex = i;
+    const ud = (t.mesh as unknown as { userData: { tileIndex: number; baseScale: number; baseY: number } }).userData;
+    ud.tileIndex = i;
+    ud.baseScale = t.mesh.scale.y;
+    ud.baseY = t.mesh.position.y;
   });
 
   const game = new Game(dice, board, {

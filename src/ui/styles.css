@@ -614,3 +614,29 @@ html, body {
 
 .intent__ico { display: inline-flex; width: 14px; height: 14px; color: var(--gold); vertical-align: -2px; margin-right: 3px; }
 .intent__ico svg { width: 100%; height: 100%; }
+
+/* HP bar pemain + ghost bar */
+.hpbar {
+  position: relative;
+  width: 120px;
+  height: 10px;
+  border-radius: 5px;
+  background: #17110c;
+  overflow: hidden;
+  margin-bottom: 2px;
+}
+.hpbar > span {
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 100%;
+  border-radius: 5px;
+}
+.hpbar__ghost {
+  background: rgba(255, 255, 255, 0.45);
+  z-index: 0;
+}
+#hp-bar {
+  background: linear-gradient(90deg, #7ddc3f, #4fae2a);
+  z-index: 1;
+}

@@ -58,8 +58,11 @@ export class Game {
     const color = behavior === 'aggressive' ? '#7a1f2e' : behavior === 'guardian' ? '#1f3a7a' : '#4a2a6a';
     bodyMat.color = new Color(color);
     const scale = behavior === 'aggressive' ? 1.25 : behavior === 'guardian' ? 1.1 : 0.9;
-    this.tomb.scale.setScalar(scale);
-    void tier;
+    // Tier mengubah skala & kecerahan emissive (elite 1.3x, boss 1.6x).
+    const tierMul = tier === 'boss' ? 1.6 : tier === 'elite' ? 1.3 : 1.0;
+    this.tomb.scale.setScalar(scale * tierMul);
+    bodyMat.emissive = new Color(behavior === 'aggressive' ? '#3a0f18' : behavior === 'guardian' ? '#0f1a3a' : '#1a0f2a');
+    bodyMat.emissiveIntensity = tier === 'boss' ? 0.9 : tier === 'elite' ? 0.6 : 0.3;
   }
 
   private spawnTomb(): Group {

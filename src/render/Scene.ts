@@ -23,7 +23,7 @@ function rng(seed: number): () => number {
   };
 }
 
-export function createScene(): SceneRig {
+export function createScene(themeId: string = 'forest'): SceneRig {
   const scene = new Scene();
   scene.background = new Color(PALETTE.bg);
   scene.fog = new Fog(new Color(PALETTE.bg), 16, 44);
@@ -85,7 +85,7 @@ export function createScene(): SceneRig {
 
   // Dekorasi lingkungan: pohon kerucut, kristal, batu (low-poly stylized).
   const animated: Array<{ mesh: Mesh; base: number; speed: number; kind: 'crystal' | 'leaf' }> = [];
-  const decorGroup = addDecor(root, 20261105);
+  const decorGroup = addDecor(root, 20261105 + themeId.length * 977);
   // Daftarkan kristal + daun untuk animasi idle.
   decorGroup.traverse((child) => {
     if (child instanceof Mesh) {
