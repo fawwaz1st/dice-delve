@@ -153,23 +153,28 @@ export class Game {
     this.run.beginRoll();
     audio.roll();
     this.events.onState();
-
-    if (wasCombat) {
-      // Dalam combat: satu ronde per klik (pemain yang menggerakkan).
-      await this.doCombatRound();
-    } else {
-      // Nilai ditentukan dadu; animasi tween menyelesaikan pada muka itu.
-      const diceValue = await this.dice.roll(this.die);
-      this.lastRoll = diceValue;
-      const rolled = this.run.applyCardRoll(diceValue);
-      this.events.onCombat('Dadu ' + rolled.value + (rolled.doubled ? ' (ganda!)' : '') + '. Pilih langkah 1-' + rolled.value + '.');
-      // PEMAIN MEMILIH langkah (agency) — bukan jalan otomatis.
-      const steps = await this.waitForStepChoice(rolled.value);
-      await this.movePiece(steps);
-      await this.resolveTile();
+    try {
+      if (wasCombat) {
+        // Dalam combat: satu ronde per klik (pemain yang menggerakkan).
+        await this.doCombatRound();
+      } else {
+        // Nilai ditentukan dadu; animasi tween menyelesaikan pada muka itu.
+        const diceValue = await this.dice.roll(this.die);
+        this.lastRoll = diceValue;
+        const rolled = this.run.applyCardRoll(diceValue);
+        this.events.onCombat('Dadu ' + rolled.value + (rolled.doubled ? ' (ganda!)' : '') + '. Pilih langkah 1-' + rolled.value + '.');
+        // PEMAIN MEMILIH langkah (agency) — bukan jalan otomatis.
+        const steps = await this.waitForStepChoice(rolled.value);
+        await this.movePiece(steps);
+        await this.resolveTile();
+      }
+    } catch (err) {
+      console.error('[DiceDelve] rollTurn error:', err);
+    } finally {
+      // Jaga agar busy selalu bersih dan state tersinkron ke UI.
+      this.busy = false;
+      this.events.onState();
     }
-    this.busy = false;
-    this.events.onState();
   }
 
   /** Toko interaktif: 3 kartu + Lewati. */
@@ -275,6 +280,11 @@ export class Game {
         this.pendingDice = 0;
         resolve(steps);
       };
+      // Watchdog: jika pemain tak memilih (mis. tab tertutup), paksa 1 langkah
+      // agar alur tak macet selamanya.
+      window.setTimeout(() => {
+        if (this.choosing && this.choiceResolver) this.choiceResolver(1);
+      }, 60000);
     });
   }
 
@@ -388,11 +398,16 @@ export class Game {
       this.events.onCombat(res.message + ' Sisa ' + (this.run.state.monster?.hp ?? 0) + '/' + (this.run.state.monster?.maxHp ?? 0) + '.');
     }
     this.busy = true;
-    await this.hitStop(250);
-    // Periksa akhir combat (menang dari skill, atau tetap combat).
-    await this.checkCombatEnd();
-    this.busy = false;
-    this.events.onState();
+    try {
+      await this.hitStop(250);
+      // Periksa akhir combat (menang dari skill, atau tetap combat).
+      await this.checkCombatEnd();
+    } catch (err) {
+      console.error('[DiceDelve] useSkill error:', err);
+    } finally {
+      this.busy = false;
+      this.events.onState();
+    }
   }
 
   /** Memasuki combat: monster muncul, pemain yang menggerakkan tiap ronde. */
@@ -435,9 +450,14 @@ export class Game {
     this.busy = true;
     this.run.beginRoll();
     this.events.onState();
-    await this.doCombatRound(action);
-    this.busy = false;
-    this.events.onState();
+    try {
+      await this.doCombatRound(action);
+    } catch (err) {
+      console.error('[DiceDelve] doCombatAction error:', err);
+    } finally {
+      this.busy = false;
+      this.events.onState();
+    }
   }
 
   /** Satu ronde combat yang digerakkan oleh klik Lempar. */
@@ -493,6 +513,12 @@ export class Game {
     const critical = m && m.hp <= m.maxHp * 0.25;
     this.fx.cam.setSlowmo(critical ? 0.35 : 1);
     if (critical) window.setTimeout(() => this.fx.cam.setSlowmo(1), 800);
+    if (st.hp > 0 && m && m.hp > 0) {
+      // Masih bertarung: status HARUS kembali 'combat' (bukan 'rolling'),
+      // kalau tidak panel combat hilang dan tombol Lempar memicu langkah biasa.
+      st.status = 'combat';
+      return;
+    }
     if (m && m.hp <= 0 && st.hp > 0) {
       const tier = (this.run.currentTile()?.type as 'monster' | 'elite' | 'boss') ?? 'monster';
       this.run.onMonsterDefeated(tier);

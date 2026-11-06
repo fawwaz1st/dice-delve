@@ -110,14 +110,25 @@ export class DiceManager {
 
   /** Lempar dadu: tentukan nilai (ter-seed), animasikan, selesaikan dengan janji. */
   roll(dice: Dice): Promise<number> {
+    const mesh = dice?.mesh;
+    if (!mesh) return Promise.resolve(1 + Math.floor(this.next() * 6));
     const value = 1 + Math.floor(this.next() * 6);
     dice.value = value;
     dice.rolling = true;
     const target = targetOrientation(value);
-    const startPos = dice.mesh.position.clone();
-    const startQuat = dice.mesh.quaternion.clone();
+    const startPos = mesh.position.clone();
+    const startQuat = mesh.quaternion.clone();
 
     return new Promise((resolve) => {
+      // Watchdog: jangan pernah macet meski tween terganggu.
+      let settled = false;
+      const settleOne = (v: number): void => {
+        if (settled) return;
+        settled = true;
+        dice.rolling = false;
+        resolve(v);
+      };
+      const watchdog = window.setTimeout(() => settleOne(value), 4000);
       // Fase 1: putar cepat di udara.
       tween({
         duration: 700,
@@ -141,8 +152,8 @@ export class DiceManager {
             onDone: () => {
               dice.mesh.position.copy(startPos);
               dice.mesh.quaternion.copy(target);
-              dice.rolling = false;
-              resolve(value);
+              window.clearTimeout(watchdog);
+              settleOne(value);
             },
           });
         },
