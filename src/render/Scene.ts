@@ -119,8 +119,9 @@ function addDecor(root: Group, seed: number): Group {
   const decor = new Group();
   const trunkMat = toonMaterial('#5a3c24');
   const leafMat = toonMaterial('#3f6632', { emissive: '#5a8a3a', emissiveIntensity: 0.15 });
-  const crystalMat = toonMaterial('#5a4a8a', { emissive: '#8f6bff', emissiveIntensity: 0.65 });
+  const crystalMat = toonMaterial('#5a4a8a', { emissive: '#a48aff', emissiveIntensity: 0.85 });
   const rockMat = toonMaterial('#4a4440');
+  const lavaMat = toonMaterial('#3a2418', { emissive: '#ff6a2a', emissiveIntensity: 0.85 });
   const trunkGeo = new BoxGeometry(0.35, 0.9, 0.35);
   const leafGeo = new ConeGeometry(0.9, 2.2, 8);
   const crystalGeo = new IcosahedronGeometry(0.5, 0);
@@ -153,7 +154,8 @@ function addDecor(root: Group, seed: number): Group {
       continue;
     } else if (kind < 0.7) {
       // Kristal memendar.
-      obj = new Mesh(crystalGeo, crystalMat);
+      obj = new Mesh(crystalGeo, lavaMat);
+      obj.material = crystalMat;
       obj.scale.setScalar(0.7 + rand() * 0.9);
       obj.castShadow = true;
     } else {

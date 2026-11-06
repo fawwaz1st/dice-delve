@@ -344,8 +344,24 @@ intent: 'normal',
   /* ---- Petak non-combat ---- */
 
   /** Peristiwa risiko/hadiah: hasil bergantung pilihan risiko pemain. */
-  resolveChoiceEvent(rng: () => number): { kind: 'blessing' | 'curse' | 'jackpot' | 'blood' | 'wisdom'; text: string; hp: number; gold: number; card?: CardId } {
+  resolveChoiceEvent(rng: () => number, choice: 'safe' | 'risky' = 'safe'): { kind: 'blessing' | 'curse' | 'jackpot' | 'blood' | 'wisdom'; text: string; hp: number; gold: number; card?: CardId } {
+    // Pilihan 'risky' menggeser peluang ke jackpot/kutuk/darah.
     const r01 = rng();
+    if (choice === 'risky') {
+      if (r01 < 0.34) {
+        const gold = Math.round((30 + Math.floor(rng() * 40)) * (this.state.goldMul ?? 1) * this.cardGoldMul());
+        this.state.gold += gold;
+        return { kind: 'jackpot', text: 'Risiko membayar: +' + gold + ' emas', hp: 0, gold };
+      }
+      if (r01 < 0.66) {
+        const dmg = 6 + Math.floor(rng() * 6);
+        this.state.hp = Math.max(0, this.state.hp - dmg);
+        return { kind: 'curse', text: 'Risiko gagal: -' + dmg + ' HP', hp: -dmg, gold: 0 };
+      }
+      const card = rollCard(rng);
+      this.state.cards.push(card);
+      return { kind: 'wisdom', text: 'Risiko berharga: kartu ' + CARDS[card].name, hp: 0, gold: 0, card };
+    }
     if (r01 < 0.30) {
       this.heal(8);
       return { kind: 'blessing', text: 'Berkah: +8 HP', hp: 8, gold: 0 };

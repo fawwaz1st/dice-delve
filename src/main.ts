@@ -65,13 +65,17 @@ async function boot(): Promise<void> {
         <div class="combatpanel__intent" id="monster-intent"></div>
         <div class="combatpanel__bar"><span id="monster-hp-bar"></span></div>
         <div class="combatpanel__nums" id="monster-hp-nums">0/0</div>
+        <div class="combatpanel__build" id="build-summary" title="Build kamu"></div>
       </div>
       <div class="combatpanel__actions">
         <button class="btn btn--mini" data-action="attack" type="button">Serang</button>
         <button class="btn btn--mini btn--ghost" data-action="defend" type="button">Bertahan</button>
         <button class="btn btn--mini btn--ghost" data-action="flee" type="button">Kabur</button>
       </div>
-      <button class="btn eventbtn" id="event-btn" type="button" hidden>Nilai Risiko</button>
+      <div class="eventchoices" id="event-choices" hidden>
+        <button class="btn btn--mini" data-event="safe" type="button">Aman</button>
+        <button class="btn btn--mini btn--ghost" data-event="risky" type="button">Berisiko</button>
+      </div>
     </div>
     <div class="log" id="combat-log"></div>
     <div class="toast-stack" id="toast-stack" aria-live="polite"></div>
@@ -267,9 +271,12 @@ async function boot(): Promise<void> {
       el.rollBtn.disabled = game.busy || s.status === 'won' || s.status === 'dead';
       renderSkills();
       updateChoiceHighlight();
+      if (s.cards && s.cards.length) {
+        const chip = (document.getElementById('build-summary') as HTMLElement);
+        chip.textContent = 'Build: ' + s.cards.map((id) => (CARDS[id] ? CARDS[id].name : id)).join(', ');
+      }
       const eventPending = !!(game as unknown as { eventResolver: unknown }).eventResolver;
-      (document.getElementById('event-btn') as HTMLButtonElement).hidden = !eventPending;
-      (document.getElementById('event-btn') as HTMLButtonElement).disabled = !eventPending;
+      (document.getElementById('event-choices') as HTMLElement).hidden = !eventPending;
       // Panel combat: HP bar + tombol aksi.
       const inCombat = s.status === 'combat' && s.monster;
       combatPanel.hidden = !inCombat;
@@ -404,8 +411,11 @@ async function boot(): Promise<void> {
 
 
 
-  (document.getElementById('event-btn') as HTMLButtonElement).addEventListener('click', () => {
-    game.chooseEvent();
+  document.querySelectorAll('#event-choices [data-event]').forEach((b) => {
+    b.addEventListener('click', () => {
+      const choice = (b as HTMLElement).dataset.event as 'safe' | 'risky';
+      game.chooseEvent(choice);
+    });
   });
 
   const endHubBtn = document.getElementById('end-hub-btn') as HTMLButtonElement;

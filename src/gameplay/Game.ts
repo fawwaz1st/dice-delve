@@ -1,4 +1,4 @@
-import { Group, Mesh, IcosahedronGeometry, Vector3 } from 'three/webgpu';
+import { Group, Mesh, IcosahedronGeometry, Vector3, Color, MeshStandardMaterial } from 'three/webgpu';
 import { Board, todaySeed, themeForFloor } from './Board.js';
 import { Piece } from './Piece.js';
 import { Run } from './Run.js';
@@ -39,7 +39,7 @@ export class Game {
   pendingDice = 0;
   choosing = false;
   private choiceResolver: ((steps: number) => void) | null = null;
-  private eventResolver: (() => void) | null = null;
+  private eventResolver: ((choice: 'safe' | 'risky') => void) | null = null;
 
   constructor(dice: DiceManager, board: Board, events: GameEvents, fx: GameFX) {
     this.dice = dice;
@@ -49,6 +49,17 @@ export class Game {
     this.run = new Run();
     this.piece = new Piece();
     this.tomb = this.spawnTomb();
+  }
+
+  /** Warna/skala monster mengikuti kepribadian (agresif merah, penjaga biru, licik ungu). */
+  private setMonsterLook(behavior: 'aggressive' | 'guardian' | 'sly', tier: 'monster' | 'elite' | 'boss'): void {
+    const body = this.tomb.children[0] as Mesh;
+    const bodyMat = body.material as MeshStandardMaterial;
+    const color = behavior === 'aggressive' ? '#7a1f2e' : behavior === 'guardian' ? '#1f3a7a' : '#4a2a6a';
+    bodyMat.color = new Color(color);
+    const scale = behavior === 'aggressive' ? 1.25 : behavior === 'guardian' ? 1.1 : 0.9;
+    this.tomb.scale.setScalar(scale);
+    void tier;
   }
 
   private spawnTomb(): Group {
@@ -162,9 +173,9 @@ export class Game {
     this.toastAt('Peristiwa terdeteksi. Klik tombol untuk menilai risiko.', 'info');
     this.events.onState();
     return new Promise((resolve) => {
-      this.eventResolver = () => {
+      this.eventResolver = (choice: 'safe' | 'risky') => {
         this.eventResolver = null;
-        const res = this.run.resolveChoiceEvent(Math.random);
+        const res = this.run.resolveChoiceEvent(Math.random, choice);
         const kind = res.kind;
         this.toastAt(res.text, kind === 'curse' || kind === 'blood' ? 'warning' : 'success');
         this.events.onCombat(res.text);
@@ -191,8 +202,8 @@ export class Game {
   }
 
   /** Dipanggil tombol UI saat peristiwa. */
-  chooseEvent(): void {
-    if (this.eventResolver) this.eventResolver();
+  chooseEvent(choice: 'safe' | 'risky'): void {
+    if (this.eventResolver) this.eventResolver(choice);
   }
 
   /** Tunggu pemain memilih langkah 1..maxSteps dengan klik petak. */
@@ -232,7 +243,14 @@ export class Game {
         const toPos = this.tileWorld(i);
         audio.hop();
         this.fx.cam.follow(toPos);
-        this.piece.hop(fromPos, toPos, 300, step);
+        // Dadu ikut pion (tetap kelihatan) + durasi hop bervariasi.
+        const near = toPos.clone();
+        near.x += 1.8;
+        near.z += 0.4;
+        near.y = 3;
+        this.die.mesh.position.copy(near);
+        const dur = 170 + Math.random() * 200;
+        this.piece.hop(fromPos, toPos, dur, step);
       };
       step();
     });
@@ -334,6 +352,7 @@ export class Game {
   enterCombat(tier: 'monster' | 'elite' | 'boss'): void {
     const st = this.run.state;
     const m = this.run.makeMonster(tier);
+    this.setMonsterLook(m.behavior, tier);
     st.monster = m;
     st.status = 'combat';
     const here = this.tileWorld(st.position).clone();
@@ -379,6 +398,7 @@ export class Game {
     const combatValue = await this.dice.roll(this.die);
     this.lastRoll = combatValue;
     const res = this.run.combatRound(combatValue, action);
+    if (res.playerDamage > 0) this.fovKick(3);
     if (res.fled) {
       this.exitCombat();
       this.piece.place(this.tileWorld(st.position));
@@ -398,10 +418,17 @@ export class Game {
     await this.hitStop(120);
     if (m.hp > 0 && res.monsterDamage > 0) {
       audio.hurt();
+      this.fx.cam.addTrauma(0.55);
+      this.fovKick(6);
       this.fx.dmg.spawn(this.piece.group.position.clone().setY(1.2), res.monsterDamage, 'hurt');
       this.fx.particles.burst(this.piece.group.position.clone().setY(0.7), { count: 14, color: '#ff3b5c', speed: 2 });
       this.fx.cam.addTrauma(0.55);
       this.events.onCombat(m.name + ' menyerang: kamu menerima ' + res.monsterDamage + ' damage.');
+      if (m.intent === 'enrage') {
+        const body = this.tomb.children[0] as Mesh;
+        (body.material as MeshStandardMaterial).emissive = new Color('#ff3b5c');
+        (body.material as MeshStandardMaterial).emissiveIntensity = 1.4;
+      }
       this.shakePiece();
     }
     await this.hitStop(100);
@@ -439,6 +466,19 @@ export class Game {
       this.toastAt('Kamu tumbang di petak ' + (st.position + 1) + '. Run selesai.', 'error');
     }
     // else: masih combat, menunggu aksi pemain berikutnya.
+  }
+
+  /** FOV kick singkat (game feel). */
+  private fovKick(amount: number): void {
+    const target = this.fx.cam.camera;
+    const start = (target as unknown as { fov: number }).fov;
+    if (!start) return;
+    (target as unknown as { fov: number }).fov = start + amount;
+    window.setTimeout(() => {
+      (target as unknown as { fov: number }).fov = start;
+      (target as unknown as { updateProjectionMatrix?: () => void }).updateProjectionMatrix?.();
+    }, 90);
+    (target as unknown as { updateProjectionMatrix?: () => void }).updateProjectionMatrix?.();
   }
 
   private flashMonster(): void {

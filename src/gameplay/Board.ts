@@ -166,6 +166,7 @@ export class Board {
   readonly theme: Theme;
   readonly group = new Group();
   readonly tiles: Tile[] = [];
+  readonly tileIcons: Mesh[] = [];
   private readonly tileGeo = new BoxGeometry(TILE_SIZE, 0.26, TILE_SIZE);
 
   constructor(seed: number, themeId: ThemeId = 'forest') {
@@ -181,10 +182,35 @@ export class Board {
       mesh.position.y = 0.13;
       mesh.receiveShadow = true;
       mesh.userData.tileIndex = index;
+      // Profil bervariasi: elite/boss/trap lebih tinggi; event terangkat halus.
+      const heightScale = t.type === 'boss' || t.type === 'elite' ? 1.8
+        : t.type === 'trap' ? 1.25
+        : t.type === 'event' ? 1.15
+        : 1.0;
+      mesh.scale.set(1, heightScale, 1);
+      mesh.castShadow = heightScale > 1;
       this.group.add(mesh);
+      this.addTileIcon(mesh, t.type);
       this.tiles.push({ index, gx: t.gx, gz: t.gz, type: t.type, mesh });
     });
     this.decorate();
+  }
+
+  /** Sprite ikon garis di atas tile khusus (boss/treasure/shop/rest/event). */
+  private addTileIcon(tileMesh: Mesh, type: TileType): void {
+    const iconMap: Partial<Record<TileType, string>> = {
+      boss: 'crown', treasure: 'gem', shop: 'coin', rest: 'heart', event: 'star', elite: 'dagger', trap: 'flame',
+    };
+    const iconName = iconMap[type];
+    if (!iconName) return;
+    // Ikon = lingkaran + teks (dibuat via SVG texture ringkas bila tersedia; fallback: diamond)
+    const dotGeo = new BoxGeometry(0.5, 0.08, 0.5);
+    const dotMat = new MeshStandardMaterial({ color: new Color('#ffb000'), emissive: new Color('#ffb000'), emissiveIntensity: 0.55, roughness: 0.4 });
+    const dot = new Mesh(dotGeo, dotMat);
+    dot.position.set(tileMesh.position.x, 0.45, tileMesh.position.z);
+    dot.rotation.y = Math.PI / 4;
+    this.group.add(dot);
+    this.tileIcons.push(dot);
   }
 
   worldPos(gx: number, gz: number): Vector3 {
